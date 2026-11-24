@@ -252,26 +252,31 @@ cifra declara quién la informó y cuándo.
 **Si falta**: `goes` en null (o `goes_note`/`perimeter`/`affected_area` ausentes) significa que el caso no trae
 ese artefacto — la vista lo omite, no lo inventa.
 
-## `scars.json` (~11 KB)
+## `scars.json` (~13 KB)
 
-Catálogo curado de cicatrices orientativas de incendios grandes documentados por CONAF-GEPRIF
-entre 2014 y 2024: cada superficie y punto sale de la capa de inicios de 50 ha o más ya
-versionada en este repositorio (`incendios-nominados.json`). Los polígonos son cuadrados del
-orden de la superficie registrada, **no** el perímetro medido del incendio.
+Catálogo curado de cicatrices de grandes incendios documentados por CONAF entre 2014 y 2024
+(MAPA-182). Nueve entradas llevan el perímetro histórico oficial de CONAF publicado en IDE
+Minagri (`if_magnitud_<temporada>`) simplificado a <= 34 vértices; las dos entradas que CONAF
+no publicó en esa serie (`valparaiso-polvora-2014` y `agua-fria-2020`) conservan un polígono
+orientativo marcado como `approx`. Cada superficie y punto de inicio sale de la capa de inicios
+de 50 ha o más (`PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA`).
 
 - **Lo consumen** `web/js/views/zona.js` (cicatrices históricas en «Mi zona») y
   `web/js/views/mapa.js` (capa «Cicatrices», que une este catálogo con la huella de calor de
   la temporada). El backend no lo lee: la distancia al borde y los años se calculan en el
   navegador, y la capa de la temporada sigue viniendo de `/api/opendata/scars.geojson`.
-- **Lo mantiene** curaduría manual: `scripts/local/revisar_datos_versionados.py` lo exime de
-  caducidad por calendario (se actualiza con evidencia nueva, no por fecha).
+- **Lo genera** `scripts/local/build_scars.py` desde el FeatureServer público de IDE Minagri /
+  CONAF; `scripts/local/revisar_datos_versionados.py` lo exime de caducidad por calendario (se
+  actualiza con evidencia nueva, no por fecha).
 - **Fuente**: `source` = `name` «CONAF-GEPRIF», `url` «…/PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0/query»,
-  `fetched_at` marca ISO UTC de la descarga de la capa de inicios.
+  `perimeters_name` «CONAF · IDE Minagri (Incendios de Magnitud 2013-2024)», `perimeters_url`
+  «https://esri.ciren.cl/server/rest/services/IDEMINAGRI/INCENDIOS_MINIS_INSTI/FeatureServer»,
+  `fetched_at` marca ISO UTC de la descarga.
 
 | Campo | Tipo | Qué es |
 |---|---|---|
-| `note` | texto | Declaración del método: cicatrices orientativas 2014-2024, no perímetros oficiales. |
-| `source` | objeto | Procedencia de la capa de inicios: `name`, `url`, `fetched_at`. |
+| `note` | texto | Declaración del método: perímetros simplificados de CONAF (IDE Minagri) y dos contornos orientativos (`approx`). |
+| `source` | objeto | Procedencia de inicios y perímetros: `name`, `url`, `perimeters_name`, `perimeters_url`, `fetched_at`. |
 | `scars` | lista | Una ficha por incendio documentado (11 hoy). |
 | `id` | texto | Identificador del incendio, p. ej. «china-muerta-2015» (en `scars[]`). |
 | `name` | texto | Nombre del incendio o del sector (en `scars[]`). |
@@ -280,9 +285,10 @@ orden de la superficie registrada, **no** el perímetro medido del incendio.
 | `communes` | lista | Comunas del punto de inicio según el registro de CONAF (en `scars[]`). |
 | `region` | texto | Nombre de la región (en `scars[]`). |
 | `burned_ha` | número | Hectáreas registradas por la fuente (en `scars[]`). |
-| `source` | texto | Cita de la cifra: punto de inicio, temporada y superficie de CONAF-GEPRIF, con el aviso de que el polígono es orientativo (en `scars[]`). |
-| `center` | lista | `[lon, lat]` del punto de inicio de CONAF desde el que se dibuja el polígono (en `scars[]`). |
-| `geometry` | objeto | Polígono GeoJSON orientativo: `type` («Polygon») y `coordinates` (en `scars[]`). |
+| `perimeter` | texto | Tipo de contorno: «real» (perímetro histórico simplificado de CONAF) o «approx» (cuadrado orientativo cuando no existe polígono en IDE Minagri) (en `scars[]`). |
+| `source` | texto | Cita de la capa oficial (IDE Minagri o GEPRIF), temporada, superficie y alcance del contorno (en `scars[]`). |
+| `center` | lista | `[lon, lat]` del punto de inicio de CONAF (en `scars[]`). |
+| `geometry` | objeto | Polígono GeoJSON en WGS84: `type` («Polygon» o «MultiPolygon», conservando lóbulos e islas interiores >= 1 % del área oficial) y `coordinates` (en `scars[]`). |
 
 **Si falta**: una zona sin incendios documentados en el catálogo simplemente no trae fichas;
 no significa que nunca se haya quemado.

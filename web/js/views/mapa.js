@@ -157,7 +157,7 @@ function legend() {
     ${layers.scars ? html`<div class="legend-row legend-row-gap">
       <span class="legend-item"><span class="sw sw-sq sw-scar-hist"></span>${dual('Cicatriz histórica (2014–2024)', 'Histórico CONAF 2014–2024')}</span>
       <span class="legend-item"><span class="sw sw-sq sw-scar-90d"></span>${dual('Calor últimos 90 días', 'Calor satelital 90 d')}</span></div>
-      <div class="legend-note movil-ok">Cicatrices históricas (CONAF) y calor satelital reciente. No es el perímetro oficial.</div>` : ''}
+      <div class="legend-note movil-ok">Histórico <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a> (<a href="https://deigeprif.com/" target="_blank" rel="noopener">GEPRIF</a> / IDE Minagri): perímetros oficiales simplificados o dibujos orientativos, según la ficha. El calor satelital reciente no es un perímetro oficial.</div>` : ''}
     ${layers.snaspe ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-snaspe"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.wui ? html`<div class="legend-row legend-row-gap">${CONAF_WUI.levels.map((l) => html`<span class="legend-item"><span class="sw sw-sq ${l.cls}"></span>${l.label}</span>`)}</div>
       <div class="legend-note movil-ok">${dual('Dónde el bosque toca casas: riesgo propio del lugar, no el peligro de hoy', 'Zonas de interfaz urbano-forestal (WUI) · 4 niveles de riesgo estructural, no diario')}. Fuente: <a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>.</div>` : ''}
@@ -294,9 +294,12 @@ function bindMap() {
     const p = feature.properties || {};
     if (p.kind === 'historica') {
       const anios = Math.max(0, new Date().getFullYear() - Number(p.year));
+      const origen = p.perimeter === 'real'
+        ? html`Perímetro histórico simplificado de <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a> (<a href="https://deigeprif.com/" target="_blank" rel="noopener">GEPRIF</a> / IDE Minagri).`
+        : html`No es el perímetro oficial. Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a> (<a href="https://deigeprif.com/" target="_blank" rel="noopener">GEPRIF</a>).`;
       abrirPopup(lngLat, html`<b>${p.name}</b><div class="tiny muted">${p.region || ''} · temporada ${p.season} · año ${p.year}</div>
         <div class="small" style="margin-top:6px">Se quemaron unas ${fmtNum(p.burned_ha, 0)} hectáreas. ${anios <= 1 ? 'El suelo se quemó hace poco.' : anios <= 4 ? 'Pasaron pocos años: el matorral vuelve antes que el bosque.' : anios <= 8 ? 'Parte del verde volvió; el bosque antiguo tarda más.' : 'Pasó cerca de una década o más: el verde no es el bosque de antes.'}</div>
-        <div class="tiny muted" style="margin-top:6px">No es el perímetro oficial. Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a>.</div>`, '280px');
+        <div class="tiny muted" style="margin-top:6px">${origen}</div>`, '280px');
       return;
     }
     abrirPopup(lngLat, html`<b>${p.comuna}</b><div class="tiny muted">${p.region}</div>
@@ -461,15 +464,22 @@ async function loadScars() {
     api.scars().catch(() => null),
     fetch('/web/data/scars.json').then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
-  const extra = (historic?.scars || []).filter((s) => s?.geometry?.type === 'Polygon' && s.geometry.coordinates?.[0]?.length >= 4).map((s) => ({
-    type: 'Feature',
-    // Solo el cuadrado orientativo se dibuja como mancha; la cicatriz con contorno real pasa intacta.
-    geometry: ringIsSquare(s.geometry.coordinates[0]) ? blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)) : s.geometry,
-    properties: {
-      kind: 'historica', name: s.name, year: s.year, season: s.season,
-      burned_ha: s.burned_ha, region: s.region,
-    },
-  }));
+  const extra = (historic?.scars || []).filter((s) => (
+    (s?.geometry?.type === 'Polygon' && s.geometry.coordinates?.[0]?.length >= 4)
+    || (s?.geometry?.type === 'MultiPolygon' && s.geometry.coordinates?.[0]?.[0]?.length >= 4)
+  )).map((s) => {
+    const esReal = s.perimeter === 'real';
+    const usarBlob = s.perimeter === 'approx' && s.geometry.type === 'Polygon' && ringIsSquare(s.geometry.coordinates[0]);
+    return {
+      type: 'Feature',
+      // Solo el cuadrado orientativo declarado «approx» se dibuja como mancha; los perímetros reales pasan intactos.
+      geometry: usarBlob ? blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)) : s.geometry,
+      properties: {
+        kind: 'historica', name: s.name, year: s.year, season: s.season,
+        burned_ha: s.burned_ha, region: s.region, perimeter: esReal ? 'real' : 'approx',
+      },
+    };
+  });
   const features = [...extra, ...(season?.features || [])];
   if (features.length) setData('scars', { type: 'FeatureCollection', features });
 }

@@ -1,9 +1,11 @@
 {
-  "note": "Cicatrices orientativas de incendios grandes documentados por CONAF entre 2014 y 2024. Cada superficie y cada punto salen de la capa de inicios de 50 ha o más ya versionada en este repositorio. El año es el del verano de esa temporada. El dibujo no es el perímetro oficial.",
+  "note": "Cicatrices de incendios grandes documentados por CONAF entre 2014 y 2024. Nueve entradas usan el perímetro histórico oficial de CONAF (IDE Minagri, capa if_magnitud_<temporada>) simplificado en metros conservando lóbulos e islas interiores >= 1 % del área oficial; las dos entradas sin polígono publicado en esa serie conservan un contorno orientativo marcado como «approx». Las superficies y puntos de inicio provienen de CONAF-GEPRIF.",
   "source": {
     "name": "CONAF-GEPRIF",
     "url": "https://services5.arcgis.com/A1ELWse9bRAi2JiV/arcgis/rest/services/PUNTOS_DE_INICIO_2002_2024_MAYOR_A_50_HA/FeatureServer/0/query",
-    "fetched_at": "2026-10-19T17:37:07+00:00"
+    "fetched_at": "2026-11-24T01:02:26+00:00",
+    "perimeters_name": "CONAF · IDE Minagri (Incendios de Magnitud 2013-2024)",
+    "perimeters_url": "https://esri.ciren.cl/server/rest/services/IDEMINAGRI/INCENDIOS_MINIS_INSTI/FeatureServer"
   },
   "scars": [
     {
@@ -11,485 +13,143 @@
       "name": "Valparaíso, camino La Pólvora",
       "season": "2013-2014",
       "year": 2014,
-      "communes": [
-        "Valparaíso"
-      ],
+      "communes": ["Valparaíso"],
       "region": "Valparaíso",
       "burned_ha": 926.4,
+      "perimeter": "approx",
       "source": "CONAF-GEPRIF, punto de inicio «FUNDO LOS PERALES - CAMINO LA POLVORA», temporada 2013-2014, 926.4 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -71.6206,
-        -33.0789
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -71.637,
-              -33.093
-            ],
-            [
-              -71.604,
-              -33.093
-            ],
-            [
-              -71.604,
-              -33.065
-            ],
-            [
-              -71.637,
-              -33.065
-            ],
-            [
-              -71.637,
-              -33.093
-            ]
-          ]
-        ]
-      }
+      "center": [-71.6206, -33.0789],
+      "geometry": {"type": "Polygon", "coordinates": [[[-71.637,-33.093],[-71.604,-33.093],[-71.604,-33.065],[-71.637,-33.065],[-71.637,-33.093]]]}
     },
     {
       "id": "china-muerta-2015",
       "name": "Reserva Nacional China Muerta",
       "season": "2014-2015",
       "year": 2015,
-      "communes": [
-        "Melipeuco"
-      ],
+      "communes": ["Melipeuco"],
       "region": "La Araucanía",
       "burned_ha": 6599.3,
-      "source": "CONAF-GEPRIF, punto de inicio «RES. NAC. CHINA MUERTA», temporada 2014-2015, 6599.3 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -71.5375,
-        -38.7606
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -71.584,
-              -38.797
-            ],
-            [
-              -71.491,
-              -38.797
-            ],
-            [
-              -71.491,
-              -38.724
-            ],
-            [
-              -71.584,
-              -38.724
-            ],
-            [
-              -71.584,
-              -38.797
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2014_2015), perímetro histórico simplificado «Res. Nac. China Muerta», temporada 2014-2015, 6599.3 ha (99.0 % del área geométrica oficial; no es el borde metro a metro).",
+      "center": [-71.5375, -38.7606],
+      "geometry": {"type": "Polygon", "coordinates": [[[-71.5106,-38.7374],[-71.5599,-38.7377],[-71.5624,-38.7585],[-71.5767,-38.7486],[-71.5741,-38.7846],[-71.5442,-38.8056],[-71.5299,-38.8062],[-71.5349,-38.7998],[-71.5292,-38.7965],[-71.5263,-38.8061],[-71.4882,-38.8156],[-71.4859,-38.8053],[-71.5017,-38.8035],[-71.4978,-38.7968],[-71.4595,-38.8204],[-71.4493,-38.806],[-71.475,-38.7982],[-71.4437,-38.7881],[-71.4446,-38.7818],[-71.4595,-38.7848],[-71.4479,-38.7731],[-71.4717,-38.7589],[-71.4707,-38.7705],[-71.4827,-38.7733],[-71.4756,-38.7796],[-71.4907,-38.7798],[-71.4777,-38.7623],[-71.4919,-38.7644],[-71.4847,-38.7552],[-71.5106,-38.7374]]]}
     },
     {
       "id": "las-maquinas-2017",
       "name": "Las Máquinas",
       "season": "2016-2017",
       "year": 2017,
-      "communes": [
-        "Cauquenes"
-      ],
+      "communes": ["Cauquenes"],
       "region": "Maule",
       "burned_ha": 159812.6,
-      "source": "CONAF-GEPRIF, perímetro histórico simplificado «LAS MÁQUINAS», temporada 2016-2017, 159812.6 ha. Pocos vértices: no es el borde metro a metro.",
-      "center": [
-        -72.2817,
-        -35.8475
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -72.289,
-              -35.858
-            ],
-            [
-              -72.467,
-              -35.573
-            ],
-            [
-              -72.379,
-              -35.302
-            ],
-            [
-              -72.218,
-              -35.202
-            ],
-            [
-              -71.858,
-              -35.629
-            ],
-            [
-              -72.289,
-              -35.858
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2016_2017), perímetro histórico simplificado «320_LAS MAQUINAS», temporada 2016-2017, 159812.6 ha (100.8 % del área geométrica oficial; no es el borde metro a metro).",
+      "center": [-72.2817, -35.8475],
+      "geometry": {"type": "Polygon", "coordinates": [[[-72.3242,-35.7531],[-72.287,-35.8582],[-72.1915,-35.8039],[-72.2191,-35.779],[-72.101,-35.7526],[-72.075,-35.7794],[-72.0621,-35.7724],[-72.0622,-35.7014],[-72.1438,-35.731],[-72.1162,-35.6979],[-72.0439,-35.695],[-72.0515,-35.6515],[-71.8576,-35.6281],[-72.018,-35.5713],[-71.9451,-35.5494],[-71.9693,-35.4759],[-72.0709,-35.4839],[-72.0968,-35.2849],[-72.2184,-35.2021],[-72.2965,-35.2567],[-72.2751,-35.3403],[-72.315,-35.3605],[-72.3788,-35.3022],[-72.398,-35.3705],[-72.3095,-35.4676],[-72.3974,-35.4188],[-72.4671,-35.573],[-72.4453,-35.6667],[-72.3242,-35.7531]]]}
     },
     {
       "id": "nilahue-barahona-2017",
       "name": "Nilahue Barahona",
       "season": "2016-2017",
       "year": 2017,
-      "communes": [
-        "Pumanque"
-      ],
+      "communes": ["Pumanque"],
       "region": "O'Higgins",
       "burned_ha": 46490.0,
-      "source": "CONAF-GEPRIF, punto de inicio «NILAHUE BARAHONA», temporada 2016-2017, 46490.0 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -71.7497,
-        -34.5839
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -71.867,
-              -34.681
-            ],
-            [
-              -71.632,
-              -34.681
-            ],
-            [
-              -71.632,
-              -34.486
-            ],
-            [
-              -71.867,
-              -34.486
-            ],
-            [
-              -71.867,
-              -34.681
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2016_2017), perímetro histórico simplificado «168_NILAHUE BARAHONA», temporada 2016-2017, 46490.0 ha (102.0 % del área geométrica oficial; no es el borde metro a metro).",
+      "center": [-71.7497, -34.5839],
+      "geometry": {"type": "Polygon", "coordinates": [[[-71.7334,-34.1541],[-71.8153,-34.1915],[-71.7917,-34.2894],[-71.8348,-34.3081],[-71.7999,-34.4884],[-71.8496,-34.542],[-71.7156,-34.6103],[-71.6006,-34.6101],[-71.6002,-34.5602],[-71.6945,-34.5331],[-71.6746,-34.5078],[-71.5581,-34.5163],[-71.5493,-34.4589],[-71.609,-34.4175],[-71.6055,-34.4838],[-71.6817,-34.4674],[-71.6792,-34.4401],[-71.7086,-34.4627],[-71.7932,-34.3006],[-71.7829,-34.2586],[-71.7319,-34.2778],[-71.7521,-34.2302],[-71.7209,-34.202],[-71.7602,-34.2184],[-71.7631,-34.1915],[-71.7334,-34.1541]]]}
     },
     {
       "id": "portezuelo-san-francisco-2017",
       "name": "San Francisco, Portezuelo",
       "season": "2016-2017",
       "year": 2017,
-      "communes": [
-        "Portezuelo"
-      ],
+      "communes": ["Portezuelo"],
       "region": "Ñuble",
       "burned_ha": 4353.2,
-      "source": "CONAF-GEPRIF, punto de inicio «SAN FRANCISCO», temporada 2016-2017, 4353.2 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -72.4453,
-        -36.5767
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -72.482,
-              -36.606
-            ],
-            [
-              -72.408,
-              -36.606
-            ],
-            [
-              -72.408,
-              -36.547
-            ],
-            [
-              -72.482,
-              -36.547
-            ],
-            [
-              -72.482,
-              -36.606
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2016_2017), perímetro histórico simplificado «547_SAN FRANCISCO», temporada 2016-2017, 4353.2 ha (99.6 % del área geométrica oficial; no es el borde metro a metro).",
+      "center": [-72.4453, -36.5767],
+      "geometry": {"type": "Polygon", "coordinates": [[[-72.4074,-36.5963],[-72.3985,-36.5928],[-72.4023,-36.589],[-72.4009,-36.5856],[-72.3906,-36.5824],[-72.3795,-36.5708],[-72.3711,-36.5472],[-72.3739,-36.5426],[-72.3796,-36.5407],[-72.3693,-36.5288],[-72.3681,-36.5185],[-72.3718,-36.5183],[-72.3858,-36.5261],[-72.3893,-36.5323],[-72.3922,-36.5285],[-72.4099,-36.5336],[-72.4389,-36.5368],[-72.4427,-36.5423],[-72.442,-36.5488],[-72.4481,-36.5482],[-72.465,-36.5661],[-72.4572,-36.5727],[-72.4597,-36.5778],[-72.4544,-36.5861],[-72.4502,-36.5875],[-72.4431,-36.5843],[-72.4423,-36.5891],[-72.425,-36.5888],[-72.4158,-36.5961],[-72.4074,-36.5963]]]}
     },
     {
       "id": "agua-fria-2020",
       "name": "Agua Fría, Molina",
       "season": "2019-2020",
       "year": 2020,
-      "communes": [
-        "Molina"
-      ],
+      "communes": ["Molina"],
       "region": "Maule",
       "burned_ha": 14987.9,
+      "perimeter": "approx",
       "source": "CONAF-GEPRIF, punto de inicio «AGUA FRIA», temporada 2019-2020, 14987.9 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -71.0725,
-        -35.3564
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -71.14,
-              -35.412
-            ],
-            [
-              -71.005,
-              -35.412
-            ],
-            [
-              -71.005,
-              -35.301
-            ],
-            [
-              -71.14,
-              -35.301
-            ],
-            [
-              -71.14,
-              -35.412
-            ]
-          ]
-        ]
-      }
+      "center": [-71.0725, -35.3564],
+      "geometry": {"type": "Polygon", "coordinates": [[[-71.14,-35.412],[-71.005,-35.412],[-71.005,-35.301],[-71.14,-35.301],[-71.14,-35.412]]]}
     },
     {
       "id": "lago-penuelas-2021",
       "name": "La Engorda, Lago Peñuelas",
       "season": "2020-2021",
       "year": 2021,
-      "communes": [
-        "Valparaíso"
-      ],
+      "communes": ["Valparaíso"],
       "region": "Valparaíso",
       "burned_ha": 3420.0,
-      "source": "CONAF-GEPRIF, punto de inicio «LA ENGORDA R.N.L.P», temporada 2020-2021, 3420.0 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -71.4569,
-        -33.1564
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -71.488,
-              -33.183
-            ],
-            [
-              -71.426,
-              -33.183
-            ],
-            [
-              -71.426,
-              -33.13
-            ],
-            [
-              -71.488,
-              -33.13
-            ],
-            [
-              -71.488,
-              -33.183
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2020_2021), perímetro histórico simplificado «221 - LA ENGORDA R.N.L.P», temporada 2020-2021, 3420.0 ha (93.1 % del área geométrica oficial; no es el borde metro a metro).",
+      "center": [-71.4569, -33.1564],
+      "geometry": {"type": "Polygon", "coordinates": [[[-71.4526,-33.1589],[-71.4189,-33.1682],[-71.4353,-33.1602],[-71.4396,-33.1561],[-71.4404,-33.1537],[-71.4399,-33.1525],[-71.4475,-33.1509],[-71.4449,-33.1426],[-71.4327,-33.1436],[-71.4397,-33.1528],[-71.4335,-33.1606],[-71.4267,-33.1394],[-71.4303,-33.1437],[-71.4465,-33.1301],[-71.4058,-33.1351],[-71.4236,-33.1242],[-71.4206,-33.0805],[-71.4464,-33.0792],[-71.48,-33.134],[-71.4526,-33.1589]]]}
     },
     {
       "id": "timaukel-russfin-2022",
       "name": "Russfin, Timaukel",
       "season": "2021-2022",
       "year": 2022,
-      "communes": [
-        "Timaukel"
-      ],
+      "communes": ["Timaukel"],
       "region": "Magallanes",
       "burned_ha": 1062.0,
-      "source": "CONAF-GEPRIF, punto de inicio «FORESTAL RUSSFIN», temporada 2021-2022, 1062.0 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -69.9142,
-        -53.7528
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -69.939,
-              -53.768
-            ],
-            [
-              -69.889,
-              -53.768
-            ],
-            [
-              -69.889,
-              -53.738
-            ],
-            [
-              -69.939,
-              -53.738
-            ],
-            [
-              -69.939,
-              -53.768
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2021_2022), perímetro histórico simplificado «13-FORESTAL RUSSFIN», temporada 2021-2022, 1062.0 ha (99.5 % del área geométrica oficial, 1 isla interior; no es el borde metro a metro).",
+      "center": [-69.9142, -53.7528],
+      "geometry": {"type": "Polygon", "coordinates": [[[-69.8346,-53.7551],[-69.8831,-53.7421],[-69.8938,-53.7457],[-69.8984,-53.7549],[-69.9087,-53.7571],[-69.9184,-53.7546],[-69.9152,-53.7513],[-69.9236,-53.7546],[-69.9139,-53.7574],[-69.9135,-53.7643],[-69.9062,-53.7615],[-69.9007,-53.7668],[-69.8827,-53.7659],[-69.8797,-53.7705],[-69.8777,-53.7629],[-69.8654,-53.7739],[-69.8622,-53.7651],[-69.8404,-53.7671],[-69.8322,-53.7616],[-69.8092,-53.7608],[-69.8242,-53.7497],[-69.8371,-53.7532],[-69.8303,-53.7551],[-69.8325,-53.7616],[-69.8446,-53.7612],[-69.8461,-53.7572],[-69.8346,-53.7551]],[[-69.8601,-53.7588],[-69.8587,-53.7581],[-69.8565,-53.7589],[-69.8553,-53.7606],[-69.8564,-53.7607],[-69.8579,-53.7617],[-69.8591,-53.7617],[-69.8599,-53.761],[-69.8649,-53.7602],[-69.8652,-53.7595],[-69.864,-53.7588],[-69.8601,-53.7588]]]}
     },
     {
       "id": "quillon-rosario-2022",
       "name": "El Rosario, Quillón",
       "season": "2021-2022",
       "year": 2022,
-      "communes": [
-        "Quillón"
-      ],
+      "communes": ["Quillón"],
       "region": "Ñuble",
       "burned_ha": 2271.2,
-      "source": "CONAF-GEPRIF, punto de inicio «EL ROSARIO», temporada 2021-2022, 2271.2 ha. El polígono es un cuadrado del orden de esa superficie, no el perímetro medido.",
-      "center": [
-        -72.5233,
-        -36.8275
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -72.55,
-              -36.849
-            ],
-            [
-              -72.497,
-              -36.849
-            ],
-            [
-              -72.497,
-              -36.806
-            ],
-            [
-              -72.55,
-              -36.806
-            ],
-            [
-              -72.55,
-              -36.849
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2021_2022), perímetro histórico simplificado «92-EL ROSARIO», temporada 2021-2022, 2271.2 ha (101.0 % del área geométrica oficial, 1 isla interior; no es el borde metro a metro).",
+      "center": [-72.5233, -36.8275],
+      "geometry": {"type": "Polygon", "coordinates": [[[-72.4964,-36.7424],[-72.5118,-36.7561],[-72.5112,-36.7473],[-72.5182,-36.7486],[-72.5189,-36.7582],[-72.5256,-36.7506],[-72.5292,-36.7541],[-72.5237,-36.7778],[-72.5301,-36.7849],[-72.5189,-36.8032],[-72.5275,-36.8219],[-72.5216,-36.8276],[-72.5047,-36.816],[-72.5054,-36.8144],[-72.5108,-36.8126],[-72.512,-36.8109],[-72.5053,-36.8105],[-72.5053,-36.8051],[-72.4824,-36.7959],[-72.4875,-36.7938],[-72.4827,-36.7822],[-72.4947,-36.7887],[-72.4974,-36.7819],[-72.4852,-36.7812],[-72.483,-36.7714],[-72.4956,-36.7655],[-72.4809,-36.7485],[-72.4955,-36.7509],[-72.4964,-36.7424]],[[-72.5014,-36.7564],[-72.5021,-36.7598],[-72.5057,-36.7595],[-72.5044,-36.7616],[-72.5015,-36.7613],[-72.5039,-36.7637],[-72.5073,-36.7596],[-72.5065,-36.7582],[-72.5083,-36.7582],[-72.5044,-36.7562],[-72.5032,-36.7582],[-72.5014,-36.7564]]]}
     },
     {
       "id": "santa-ana-2023",
       "name": "Santa Ana, Nacimiento",
       "season": "2022-2023",
       "year": 2023,
-      "communes": [
-        "Nacimiento"
-      ],
+      "communes": ["Nacimiento"],
       "region": "Biobío",
       "burned_ha": 69080.5,
-      "source": "CONAF-GEPRIF, perímetro histórico simplificado «SANTA ANA», temporada 2022-2023, 69080.5 ha. Pocos vértices: no es el borde metro a metro.",
-      "center": [
-        -72.8497,
-        -37.4364
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -72.869,
-              -37.465
-            ],
-            [
-              -73.106,
-              -37.28
-            ],
-            [
-              -73.078,
-              -36.952
-            ],
-            [
-              -72.958,
-              -36.985
-            ],
-            [
-              -72.798,
-              -37.224
-            ],
-            [
-              -72.775,
-              -37.401
-            ],
-            [
-              -72.869,
-              -37.465
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2022_2023), perímetro histórico simplificado «SANTA ANA», temporada 2022-2023, 69080.5 ha (99.3 % del área geométrica oficial; no es el borde metro a metro).",
+      "center": [-72.8497, -37.4364],
+      "geometry": {"type": "Polygon", "coordinates": [[[-73.0984,-37.2801],[-73.0445,-37.2725],[-72.9799,-37.3516],[-72.9367,-37.355],[-72.8683,-37.4644],[-72.7795,-37.399],[-72.8237,-37.3043],[-72.798,-37.2233],[-72.9312,-37.1737],[-72.9887,-37.1854],[-72.9931,-37.0711],[-73.0312,-37.0625],[-73.0363,-37.0875],[-73.062,-37.042],[-73.0298,-37.0131],[-73.014,-37.0176],[-72.9998,-36.9969],[-72.9797,-37.0025],[-72.9773,-36.9984],[-72.9719,-36.9975],[-72.963,-36.991],[-72.9579,-36.9849],[-73.0388,-36.9844],[-73.0765,-36.9518],[-73.1214,-37.0796],[-73.0736,-37.0932],[-73.1105,-37.129],[-73.0487,-37.2186],[-73.1261,-37.2176],[-73.0984,-37.2801]]]}
     },
     {
       "id": "las-tablas-2024",
       "name": "Las Tablas y Lago Peñuelas",
       "season": "2023-2024",
       "year": 2024,
-      "communes": [
-        "Valparaíso"
-      ],
+      "communes": ["Valparaíso"],
       "region": "Valparaíso",
       "burned_ha": 8656.5,
-      "source": "CONAF-GEPRIF, perímetro histórico simplificado «COMPLEJO LAS TABLAS- RESERVA LAGO PEÑUELAS», temporada 2023-2024, 8656.5 ha. Pocos vértices: no es el borde metro a metro.",
-      "center": [
-        -71.5206,
-        -33.1864
-      ],
-      "geometry": {
-        "type": "Polygon",
-        "coordinates": [
-          [
-            [
-              -71.509,
-              -33.201
-            ],
-            [
-              -71.53,
-              -33.05
-            ],
-            [
-              -71.499,
-              -33.034
-            ],
-            [
-              -71.438,
-              -33.079
-            ],
-            [
-              -71.509,
-              -33.201
-            ]
-          ]
-        ]
-      }
+      "perimeter": "real",
+      "source": "CONAF · IDE Minagri (if_magnitud_2023_2024), perímetro histórico simplificado «Complejo Las Tablas- Reserva Lago Peñuelas», temporada 2023-2024, 8656.5 ha (92.6 % del área geométrica oficial, 3 lóbulos; no es el borde metro a metro).",
+      "center": [-71.5206, -33.1864],
+      "geometry": {"type": "MultiPolygon", "coordinates": [[[[-71.5247,-33.0392],[-71.506,-33.1216],[-71.5308,-33.1705],[-71.5043,-33.2007],[-71.5289,-33.1681],[-71.4981,-33.1897],[-71.4655,-33.1664],[-71.4824,-33.1635],[-71.4833,-33.1591],[-71.4512,-33.1613],[-71.4832,-33.1125],[-71.4516,-33.097],[-71.4381,-33.0772],[-71.4394,-33.0638],[-71.4642,-33.0762],[-71.4947,-33.0348],[-71.5203,-33.0383],[-71.4773,-33.0644],[-71.5247,-33.0392]]],[[[-71.4593,-33.0174],[-71.4678,-32.9826],[-71.4734,-33.018],[-71.4773,-33.0157],[-71.489,-33.0272],[-71.4593,-33.0174]]],[[[-71.4456,-33.1432],[-71.4502,-33.1317],[-71.4471,-33.1322],[-71.4475,-33.1371],[-71.4423,-33.1351],[-71.444,-33.1295],[-71.4526,-33.1298],[-71.4504,-33.1267],[-71.4602,-33.1245],[-71.4563,-33.1444],[-71.4456,-33.1432]]]]}
     }
   ]
 }
