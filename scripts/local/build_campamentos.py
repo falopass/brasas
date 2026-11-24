@@ -109,7 +109,7 @@ def main() -> None:
     args = parser.parse_args()
     raw = download() if args.refresh or not RAW.exists() else json.loads(RAW.read_text(encoding="utf-8"))
     out = build(raw)
-    OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    OUT.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
     print(f"{len(out['comunas'])} comunas con campamentos vigentes "
           f"({sum(c['n_campamentos'] for c in out['comunas'])} campamentos) en {OUT.name}")
 
