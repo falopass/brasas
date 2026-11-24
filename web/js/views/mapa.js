@@ -2,7 +2,7 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
-import { AGE_BINS, basemap, BASEMAPS, CONAF_WUI, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, setWui, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido, visibleBbox } from '../map.js';
+import { AGE_BINS, basemap, BASEMAPS, CONAF_WUI, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, INFRA_MINZOOM, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, setWui, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido, visibleBbox } from '../map.js';
 import { fechaGibs, GIBS, tiempoGibs, WMS_LAYERS, WORLDCOVER_CLASSES } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
 import { errorConSalida } from '../errores.js';
@@ -38,12 +38,12 @@ let snaspeSourceUrl = '';
 const cargando = new Set();
 // Capa que se volvió a prender mientras su carga seguía en vuelo: al terminar, se recarga.
 const recargar = new Set();
-const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, wui: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false, gwis_ranking: false, gwis_ba: false, worldcover: false, terreno3d: false };
+const layers = { focos: true, incendios: true, risk: false, rain: false, reports: true, places: true, hulls: false, lightning: false, aire: false, scars: false, snaspe: false, wui: false, infra: false, senapred: false, relieve: false, gibs_goes: false, gibs_viirs: false, gibs_aod: false, gwis_ranking: false, gwis_ba: false, worldcover: false, terreno3d: false };
 // MAPA-164 / UX-82: las casillas se ordenan por tema (fuego / contexto / tú); estado y URL
 // siguen en CAPAS. Las coropletas (COROPLETAS) viven en su grupo radio dentro de «Contexto».
 const GRUPOS_CAPAS = [
   ['Fuego', ['focos', 'incendios', 'hulls', 'lightning']],
-  ['Contexto', ['aire', 'scars', 'snaspe', 'wui', 'viento', 'relieve', 'terreno3d', 'worldcover', 'gwis_ranking', 'gwis_ba']],
+  ['Contexto', ['aire', 'scars', 'snaspe', 'wui', 'infra', 'viento', 'relieve', 'terreno3d', 'worldcover', 'gwis_ranking', 'gwis_ba']],
   ['Tú', ['places', 'reports']],
 ];
 const RASTER_CTX_KEYS = ['gibs_goes', 'gibs_viirs', 'gibs_aod', 'relieve', 'gwis_ranking', 'gwis_ba', 'worldcover'];
@@ -74,6 +74,7 @@ function layerSources() {
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
   if (layers.wui) parts.push('interfaz urbano-forestal: CONAF GEPRIF');
+  if (layers.infra) parts.push('infraestructura crítica: OpenStreetMap (ODbL) y DEIS · MINSAL (CC0)');
   if (layers.viento) {
     const resViento = vientoInfo?.tieneFina === false ? 'ECMWF IFS 1°' : 'ECMWF IFS 0,25° centro-sur / 1° país';
     parts.push(`viento: Open-Meteo (${resViento})${vientoEdadTxt ? `, ${vientoEdadTxt}` : ''}`);
@@ -108,7 +109,7 @@ function legend() {
   leg.classList.toggle('legend-compact', compacta);
   const hayContenido = Boolean(
     layers.focos || layers.incendios || layers.reports || layers.risk || layers.rain || layers.senapred
-    || layers.relieve || layers.terreno3d || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.wui || layers.viento
+    || layers.relieve || layers.terreno3d || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.wui || layers.infra || layers.viento
     || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.gwis_ranking || layers.gwis_ba || layers.worldcover || layers.aire,
   );
   if (!hayContenido) { leg.innerHTML = ''; return; }
@@ -161,6 +162,13 @@ function legend() {
     ${layers.snaspe ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-snaspe"></span>Áreas protegidas del Estado (SNASPE · CONAF)</span></div>` : ''}
     ${layers.wui ? html`<div class="legend-row legend-row-gap">${CONAF_WUI.levels.map((l) => html`<span class="legend-item"><span class="sw sw-sq ${l.cls}"></span>${l.label}</span>`)}</div>
       <div class="legend-note movil-ok">${dual('Dónde el bosque toca casas: riesgo propio del lugar, no el peligro de hoy', 'Zonas de interfaz urbano-forestal (WUI) · 4 niveles de riesgo estructural, no diario')}. Fuente: <a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>.</div>` : ''}
+    ${layers.infra ? html`<div class="legend-row legend-row-gap">
+      <span class="legend-item"><span class="sw sw-infra-b"></span>Bomberos</span>
+      <span class="legend-item"><span class="sw sw-infra-s"></span>Salud</span>
+      <span class="legend-item"><span class="sw sw-infra-e"></span>Escuelas</span>
+      <span class="legend-item"><span class="sw sw-infra-t"></span>Subestaciones</span>
+      <span class="legend-item"><span class="sw sw-infra-l"></span>${dual('Líneas eléctricas de alta tensión', 'Líneas AT (≥110 kV)')}</span></div>
+      <div class="legend-note movil-ok">${dual(`Infraestructura crítica visible al acercar el mapa (desde zoom ${INFRA_MINZOOM}).`, `Infraestructura crítica (zoom ≥${INFRA_MINZOOM}, archivo estático sin consultar Overpass): bomberos, escuelas, subestaciones y líneas ≥110 kV de OSM; red pública vigente de salud de DEIS MINSAL.`)} Solo referencia: en emergencia sigue las rutas y albergues oficiales de SENAPRED y el municipio. © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) · <a href="https://datos.gob.cl/dataset/3bf4cf7c-f638-4735-9a01-f65faae4beca" target="_blank" rel="noopener">DEIS · MINSAL</a> (CC0).</div>` : ''}
     ${layers.viento ? html`<div class="legend-row legend-row-gap">
       <span class="legend-item"><span class="sw sw-sq sw-wind-1"></span>&lt;15 km/h</span>
       <span class="legend-item"><span class="sw sw-sq sw-wind-2"></span>15–30 km/h</span>
@@ -191,6 +199,10 @@ function legend() {
 
 // UX-78: los mismos nombres que declara el backend (backend/providers/overpass.py).
 const SERVICE_LABEL = { assembly_point: 'Punto de encuentro', hospital: 'Hospital', clinic: 'Centro de salud', fire_station: 'Cuartel de Bomberos', police: 'Carabineros' };
+// MAPA-181: etiqueta en claro de cada tipo de infraestructura crítica (`k` del archivo estático).
+const INFRA_LABEL = { b: 'Cuartel de Bomberos', s: 'Salud pública', e: 'Escuela (posible albergue)', t: 'Subestación eléctrica' };
+// El archivo estático (~1,3 MB) se descarga una sola vez por sesión, al prender la capa.
+let infraCargada = false;
 
 async function loadOfficial() {
   try {
@@ -313,7 +325,28 @@ function bindMap() {
       <div class="tiny muted">${SERVICE_LABEL[p.kind] || p.kind_label || 'Servicio'}</div>
       <p class="small" style="margin-top:6px"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}">Cómo llegar</a>. Sigue las rutas y los puntos que indique la autoridad: los puntos de OpenStreetMap pueden no ser los oficiales.</p>`, '260px');
   };
-  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['official-labels', onOfficial], ['incident-rings', onIncidente], ['incident-labels', onIncidente], ['incident-hulls-line', onIncidente], ['lightning', onLightning], ['scars-fill', onScars], ['snaspe-fill', onSnaspe], ['services', onService]]
+  const onInfraPunto = (feature, lngLat) => {
+    if (!layers.infra) return;
+    const p = feature.properties || {};
+    const [lon, lat] = feature.geometry?.coordinates || [];
+    const coordsOk = Number.isFinite(lat) && Number.isFinite(lon);
+    abrirPopup(lngLat, html`<b>${p.n || INFRA_LABEL[p.k] || 'Infraestructura crítica'}</b>
+      <div class="tiny muted">${INFRA_LABEL[p.k] || 'Infraestructura'}${p.d ? ` · ${p.d}` : ''}</div>
+      ${p.k === 'e' ? html`<p class="small">Posible albergue de referencia. En emergencia verifica siempre los albergues habilitados por SENAPRED y el municipio.</p>` : ''}
+      ${coordsOk ? html`<p class="small"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}" target="_blank" rel="noopener">Cómo llegar</a></p>` : ''}
+      <div class="tiny muted">${p.s === 'deis'
+        ? html`Fuente: <a href="https://datos.gob.cl/dataset/3bf4cf7c-f638-4735-9a01-f65faae4beca" target="_blank" rel="noopener">DEIS · MINSAL</a> (CC0 1.0).`
+        : html`Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL).`}</div>`, '260px');
+  };
+  const onInfraLinea = (feature, lngLat) => {
+    if (!layers.infra) return;
+    const p = feature.properties || {};
+    abrirPopup(lngLat, html`<b>${p.n || 'Línea eléctrica de alta tensión'}</b>
+      <div class="tiny muted">${p.kv ? `${p.kv} kV · ` : ''}Alta tensión</div>
+      <p class="small">Referencia de red eléctrica. El humo y el fuego bajo líneas de alta tensión pueden provocar cortes o arcos eléctricos.</p>
+      <div class="tiny muted">Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL).</div>`, '260px');
+  };
+  soltar = [['detections', onDetection], ['goes-pixels', onDetection], ['reports', onReport], ['risk-fill', onRisk], ['rain-fill', onRain], ['senapred-fill', onSenapred], ['official', onOfficial], ['official-labels', onOfficial], ['incident-rings', onIncidente], ['incident-labels', onIncidente], ['incident-hulls-line', onIncidente], ['lightning', onLightning], ['scars-fill', onScars], ['snaspe-fill', onSnaspe], ['services', onService], ['infra-puntos', onInfraPunto], ['infra-lineas', onInfraLinea]]
     .map(([capa, fn]) => registrarToque(capa, fn));
 }
 
@@ -552,6 +585,44 @@ async function loadSnaspe(input, ticket) {
   }
 }
 
+/** Infraestructura crítica (MAPA-181): archivo estático versiónado (OSM ODbL + DEIS MINSAL
+ *  CC0) que se descarga una sola vez; alimenta puntos y líneas, visibles desde zoom 10. */
+async function loadInfra(input, ticket) {
+  if (infraCargada) return;
+  try {
+    const res = await fetch('/web/data/infraestructura/chile.json');
+    const body = await res.json().catch(() => null);
+    if (!res.ok || !Array.isArray(body?.rows) || !Array.isArray(body?.lines)) throw new Error('sin infraestructura');
+    setData('infra-puntos', {
+      type: 'FeatureCollection',
+      features: body.rows.map(([lon, lat, k, n, s, d]) => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: { k, n, s, d },
+      })),
+    });
+    setData('infra-lineas', {
+      type: 'FeatureCollection',
+      features: body.lines.map((l) => ({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: l.coordinates },
+        properties: { kv: l.kv, n: l.n || '', s: l.s || 'osm' },
+      })),
+    });
+    infraCargada = true;
+  } catch {
+    if (ticket !== undefined && capaTicket.infra !== ticket) return;
+    layers.infra = false;
+    if (input) input.checked = false;
+    applyLayers();
+    syncCapaInputs();
+    legend();
+    syncBasemapCredit();
+    updateCapasUrl();
+    toast('No se pudo cargar la infraestructura crítica.', 'error');
+  }
+}
+
 /** Humo GOES-19 (capa «aire», DET-16/DET-48): máscara ADPF + espesor óptico AODF; si falla, el switch se apaga. */
 async function loadSmoke(input, ticket) {
   try {
@@ -742,6 +813,7 @@ async function aplicarPresetMapa(presetId) {
   if (layers.lightning && !prev.lightning) loaders.push(setCapa('lightning', true, layersEl?.querySelector('[data-capa="lightning"]')));
   if (layers.senapred && !prev.senapred) loaders.push(setCapa('senapred', true, layersEl?.querySelector('[data-capa="senapred"]')));
   if (layers.snaspe && !prev.snaspe) loaders.push(setCapa('snaspe', true, layersEl?.querySelector('[data-capa="snaspe"]')));
+  if (layers.infra && !prev.infra) loaders.push(setCapa('infra', true, layersEl?.querySelector('[data-capa="infra"]')));
   if ((layers.risk || layers.rain) && !(prev.risk || prev.rain)) loaders.push(loadRisk());
   if (layers.hulls && !prev.hulls) loaders.push(loadIncidents());
   if (layers.scars && !prev.scars) loaders.push(loadScars());
@@ -760,7 +832,7 @@ async function setCapa(key, checked, input) {
   Object.assign(layers, toggleCapa(layers, key, checked));
   // La casilla no se deshabilita mientras carga: un input deshabilitado suelta el foco y el
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
-  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred, snaspe: loadSnaspe }[key];
+  const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred, snaspe: loadSnaspe, infra: loadInfra }[key];
   if (key === 'aire' && !checked) { smokeMeta = null; setData('smoke', EMPTY_FC); }
   if (key === 'viento' && !checked) { vientoEdadTxt = ''; vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); syncVientoControls(); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
@@ -792,7 +864,7 @@ async function setCapa(key, checked, input) {
   if (key === 'terreno3d' && checked && navigator.connection?.saveData) {
     toast('Relieve 3D activado (descarga teselas de elevación).');
   }
-  if (key === 'wui' || key === 'relieve' || key === 'terreno3d' || key === 'worldcover' || key === 'gwis_ranking' || key === 'gwis_ba' || COROPLETAS.includes(key)) {
+  if (key === 'wui' || key === 'relieve' || key === 'terreno3d' || key === 'worldcover' || key === 'gwis_ranking' || key === 'gwis_ba' || key === 'infra' || COROPLETAS.includes(key)) {
     syncGibsControls();
     syncBasemapCredit();
   }
@@ -1038,6 +1110,9 @@ function creditoFondoHtml() {
   }
   if (layers.wui) {
     credito = html`${credito} · <a href="https://deigeprif.com/" target="_blank" rel="noopener">CONAF · GEPRIF Zonas de Interfaz</a>`;
+  }
+  if (layers.infra) {
+    credito = html`${credito} · Infraestructura: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL) y <a href="https://datos.gob.cl/dataset/3bf4cf7c-f638-4735-9a01-f65faae4beca" target="_blank" rel="noopener">DEIS · MINSAL</a> (CC0)`;
   }
   return html`${credito} · Límites: BCN · <a href="#/calidad">Fuentes y licencias</a>`;
 }
@@ -1851,6 +1926,7 @@ function applyLayers() {
   setRelieve(layers.relieve);
   setTerreno3d(layers.terreno3d);
   setWui(layers.wui);
+  show('infra-puntos', layers.infra); // las líneas AT siguen a los puntos (LINKED)
   applyGibs();
   applyWms();
 }
@@ -1911,6 +1987,7 @@ export default {
     if (layers.scars) loadScars();
     if (layers.snaspe) loadSnaspe();
     if (layers.senapred) loadSenapred();
+    if (layers.infra) setCapa('infra', true, layersEl?.querySelector('[data-capa="infra"]'));
     if (layers.aire) loadSmoke().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (layers.viento) loadWind().then(() => { if (mounted) { syncCapaInputs(); legend(); } });
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
@@ -2037,7 +2114,7 @@ export default {
     // Las demás vistas ven los focos sueltos; lo opcional de esta vista queda apagado.
     show(['detections', 'goes-pixels'], true);
     show(['explore', 'official', 'incident-hulls-fill', 'incident-hulls-line', 'incident-labels', 'scars-fill', 'scars-line', 'smoke-fill',
-      'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade'], false);
+      'risk-fill', 'rain-fill', 'senapred-fill', 'snaspe-fill', 'lightning', 'viento', 'relieve-hillshade', 'infra-puntos'], false);
     apagarGibsVisual(); // la imagen satelital es solo de esta vista; `layers` conserva la elección
     apagarWmsVisual(); // las capas WMS externas son solo de esta vista; `layers` conserva la elección
     setWui(false); // la capa WUI es solo de esta vista; `layers.wui` conserva la elección

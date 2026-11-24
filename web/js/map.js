@@ -75,6 +75,11 @@ const SENAPRED_TEX = { roja: 'extremo', amarilla: 'alto', temprana_preventiva: '
 const SENAPRED_TIPOS = ['roja', 'amarilla', 'temprana_preventiva', 'otra'];
 // Destellos GLM (rayos): cian, lejos del ámbar de los focos de calor y del violeta de los avisos.
 export const LIGHTNING_COLOR = '#00b8d4';
+// Infraestructura crítica estática (MAPA-181): solo se dibuja al acercar el mapa.
+// Colores con contraste ≥3:1 sobre fondo claro y oscuro (verificado por validate_palette.mjs).
+export const INFRA_MINZOOM = 10;
+export const INFRA_COLORS = { b: '#c92a2a', s: '#087f5b', e: '#1971c2', t: '#a83cc9', l: '#a83cc9' };
+export const INFRA_LINE_COLOR = { dark: '#c77dff', light: '#7b2cbf' };
 // Reexportado para la leyenda del mapa; la carga del conjunto sigue siendo diferida.
 export { SMOKE_COLOR, SMOKE_DENSITY_COLOR };
 
@@ -615,7 +620,7 @@ export function setWui(visible) {
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
 const OVERLAY_SOURCES = ['places', 'place-radius', 'place-lines', 'detections', 'goes-pixels', 'reports', 'services', 'explore', 'official',
-  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'case-affected', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio'];
+  'incident-hulls', 'incident-rings', 'lightning', 'smoke', 'case-footprint', 'case-points', 'case-goes', 'case-final', 'case-event', 'case-perimeter', 'case-affected', 'pick', 'scars', 'snaspe', 'official-perimeter', 'seleccion', 'filtro-radio', 'infra-puntos', 'infra-lineas'];
 
 // «zoom» solo puede ir en el interpolate de más afuera: anidado en un `case` o un `*`,
 // MapLibre rechaza la capa entera y los focos no se dibujan.
@@ -647,6 +652,9 @@ export function addOverlays(map, theme) {
     paint: { 'fill-color': '#2b8a3e', 'fill-opacity': 0.16 } });
   add({ id: 'snaspe-line', type: 'line', source: 'snaspe', layout: { visibility: 'none' },
     paint: { 'line-color': '#2b8a3e', 'line-width': 1.5 } });
+  // Infraestructura crítica (MAPA-181): líneas AT >= 110 kV bajo los focos, visibles desde zoom 10.
+  add({ id: 'infra-lineas', type: 'line', source: 'infra-lineas', minzoom: INFRA_MINZOOM, layout: { visibility: 'none' },
+    paint: { 'line-color': INFRA_LINE_COLOR[theme] || INFRA_LINE_COLOR.dark, 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 13, 2.4], 'line-dasharray': [4, 2], 'line-opacity': 0.9 } });
   // Cicatrices (AGUA-01, CONAF-HIST-10Y y UX-82): contorno discontinuo para históricas CONAF
   // y relleno más marcado sin trazo punteado para el calor satelital de los últimos 90 días.
   add({ id: 'scars-fill', type: 'fill', source: 'scars',
@@ -798,6 +806,14 @@ export function addOverlays(map, theme) {
   // A escala de país va hueco: debajo queda la celda de focos y su número se tiene que leer.
   dot('official', 'official', ['step', ['zoom'], 'rgba(0,0,0,0)', CELL_ZOOM_MAX, ring], ['match', ['get', 'status'], 'extinguido', 4.5, 7], {
     stroke: ['match', ['get', 'status'], 'confirmado', '#d4231a', 'controlado', '#e8a317', '#8a8378'], strokeWidth: 3.2 });
+  // Infraestructura crítica (MAPA-181): bomberos, salud, escuelas y subestaciones desde zoom 10.
+  add({ id: 'infra-puntos', type: 'circle', source: 'infra-puntos', minzoom: INFRA_MINZOOM, layout: { visibility: 'none' },
+    paint: {
+      'circle-color': ['match', ['get', 'k'], 'b', INFRA_COLORS.b, 's', INFRA_COLORS.s, 'e', INFRA_COLORS.e, 't', INFRA_COLORS.t, '#6c757d'],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, ['match', ['get', 'k'], 'e', 3.5, 4.6], 13, ['match', ['get', 'k'], 'e', 5, 6.5]],
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 1.4,
+    } });
   dot('services', 'services', ['match', ['get', 'kind'], 'assembly_point', '#0ca30c', 'hospital', '#e34948', 'clinic', '#e87ba4', 'fire_station', '#eb6834', '#3987e5'], 6, { stroke: '#ffffff', strokeWidth: 1.5 });
   dot('places-halo', 'places', '#3987e5', 16, { strokeWidth: 0, paint: { 'circle-opacity': 0.18, 'circle-blur': 0.6 } });
   dot('places', 'places', '#3987e5', 7, { stroke: '#ffffff', strokeWidth: 2.5 });
@@ -821,7 +837,7 @@ export function addOverlays(map, theme) {
 
 // Capas que siguen la visibilidad de otra (halo y latido de los focos, halo de los lugares,
 // tramas del nivel de peligro, que acompañan siempre a risk-fill).
-const LINKED = { 'smoke-fill': ['smoke-edge'], 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-pulse2', 'detections-hot', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], 'case-goes': ['case-goes-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
+const LINKED = { 'smoke-fill': ['smoke-edge'], 'snaspe-fill': ['snaspe-line'], detections: ['detections-glow', 'detections-pulse', 'detections-pulse2', 'detections-hot', 'detections-count', 'incident-rings', 'incident-hulls-line', 'incident-labels'], official: ['official-labels'], 'goes-pixels': ['goes-pixels-line'], 'case-goes': ['case-goes-line'], places: ['places-halo', 'place-lines', 'place-lines-label'], 'infra-puntos': ['infra-lineas'], 'risk-fill': RISK_TEX_LEVELS.map((l) => `risk-tex-${l}`), 'senapred-fill': SENAPRED_TIPOS.map((t) => `senapred-tex-${t}`) };
 
 /** Latido de los focos confiables de menos de 3 h: una isoterma que se abre y se apaga cada 2,2 s
  *  (dos, a contratiempo, en los de menos de 1 h). */
@@ -1189,6 +1205,7 @@ const CAPA_NOMBRES = [
   ['scars-fill', 'cicatrices'],
   ['snaspe-fill', 'áreas protegidas'],
   ['conaf-wui-fill', 'interfaz urbano-forestal'],
+  ['infra-puntos', 'infraestructura crítica'],
   ['reports', 'avisos de vecinos'],
   ['places', 'lugares'],
   ['incident-hulls-fill', 'huellas'],

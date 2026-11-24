@@ -10,8 +10,8 @@ import {
   WORLDCOVER_WMS_HOST,
   wmsTileUrl,
 } from '../../web/js/gibs.js';
-import { CAPAS, COROPLETAS, capasFromUrl, capasToUrl, seleccionarCoropleta, toggleCapa } from '../../web/js/capas.js';
-import { AWS_DEM_SOURCE, CONAF_WUI, terreno3dPermitido } from '../../web/js/map.js';
+import { CAPAS, COROPLETAS, capasFromUrl, capasToUrl, PRIORIDAD_TOQUE, seleccionarCoropleta, toggleCapa } from '../../web/js/capas.js';
+import { AWS_DEM_SOURCE, CONAF_WUI, INFRA_COLORS, INFRA_MINZOOM, terreno3dPermitido } from '../../web/js/map.js';
 
 describe('capas WMS abiertas: GWIS (OFI-34) y ESA WorldCover (MAPA-185)', () => {
   test('GWIS usa MapServer WMS 1.1.1 en EPSG:3857 con STYLES= y TIME solo en ecmwf.ranking', () => {
@@ -140,5 +140,56 @@ describe('Zonas de Interfaz Urbano-Forestal CONAF GEPRIF (MAPA-183)', () => {
     assert.equal(conGwis.gwis_ranking, true);
     assert.equal(conGwis.senapred, false);
     assert.equal(conGwis.wui, true);
+  });
+});
+
+describe('Infraestructura crítica (MAPA-181)', () => {
+  const todasOff = Object.fromEntries(CAPAS.map((c) => [c.key, false]));
+
+  test('CAPAS registra infra: url infraestructura, etiqueta visible y apagada por defecto', () => {
+    const capa = CAPAS.find((c) => c.key === 'infra');
+    assert.ok(capa, 'CAPAS no tiene la capa infra');
+    assert.equal(capa.url, 'infraestructura');
+    assert.equal(capa.label, 'Infraestructura crítica');
+    assert.equal(capa.on, false, 'la capa de infraestructura crítica va apagada por defecto');
+  });
+
+  test('capasFromUrl y capasToUrl soportan infraestructura', () => {
+    const parsed = capasFromUrl('infraestructura');
+    assert.equal(parsed.infra, true);
+    assert.equal(capasToUrl(parsed), 'infraestructura');
+
+    const combinado = capasFromUrl('focos,infraestructura');
+    assert.equal(combinado.focos, true);
+    assert.equal(combinado.infra, true);
+    assert.equal(capasToUrl(combinado), 'focos,infraestructura');
+  });
+
+  test('infra no apaga las coropletas comunales ni viceversa', () => {
+    assert.ok(!COROPLETAS.includes('infra'));
+
+    const conCoropleta = toggleCapa({ ...todasOff, infra: true }, 'risk', true);
+    assert.equal(conCoropleta.risk, true);
+    assert.equal(conCoropleta.infra, true);
+
+    const conInfra = toggleCapa(conCoropleta, 'infra', true);
+    assert.equal(conInfra.infra, true);
+    assert.equal(conInfra.risk, true);
+
+    const conSenapred = seleccionarCoropleta(conInfra, 'senapred');
+    assert.equal(conSenapred.senapred, true);
+    assert.equal(conSenapred.risk, false);
+    assert.equal(conSenapred.infra, true, 'elegir una coropleta comunal no apaga infra');
+  });
+
+  test('INFRA_MINZOOM, INFRA_COLORS y prioridad de toque de puntos y líneas', () => {
+    assert.equal(INFRA_MINZOOM, 10);
+    assert.deepEqual(Object.keys(INFRA_COLORS).sort(), ['b', 'e', 'l', 's', 't']);
+    assert.equal(INFRA_COLORS.b, '#c92a2a');
+    assert.equal(INFRA_COLORS.s, '#087f5b');
+    assert.equal(INFRA_COLORS.e, '#1971c2');
+    assert.equal(INFRA_COLORS.t, '#a83cc9');
+    assert.equal(INFRA_COLORS.l, '#a83cc9');
+    assert.ok(PRIORIDAD_TOQUE['infra-puntos'] < PRIORIDAD_TOQUE['infra-lineas'], 'un punto gana el toque sobre una línea');
   });
 });

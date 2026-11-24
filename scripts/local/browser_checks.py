@@ -330,6 +330,7 @@ CAPA_NOMBRE = {
     "worldcover": ("uso de suelo", "worldcover"),
     "terreno3d": ("relieve 3d", "terreno 3d"),
     "wui": ("interfaz",),
+    "infra": ("infraestructura",),
 }
 
 # Capas sin datos a la vista en la demo, con el motivo escrito al lado: no se les puede exigir
@@ -343,6 +344,7 @@ CAPAS_SIN_DATOS = {
     "senapred": "la demo no siembra alertas de SENAPRED (/api/senapred/alertas vacío)",
     "lightning": "la demo no siembra rayos: la capa lee GLM en vivo de S3 y puede no haber destellos sobre Chile en la ventana",
     "gwis_ba": "GWIS nrt.ba.month puede venir vacío sobre el encuadre de la demo fuera de temporada de grandes incendios",
+    "infra": "la capa de infraestructura crítica usa minzoom 10 (no pinta píxeles en el encuadre país/región de la demo)",
 }
 
 # Capas cuya leyenda todavía no las nombra: excepción con motivo, no un cajón de sastre.

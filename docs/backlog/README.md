@@ -45,7 +45,7 @@ Reconciliado contra `main` (`4268a0f`, #888) y los PRs abiertos. Ninguno de esto
 14. ~~[OFI-35](hecho/OFI-35.md) — SINCA horario real + `PM10` y `CO` para picos de humo agudo.~~ En `hecho/`.
 15. ~~[MAPA-182](hecho/MAPA-182.md) — Perímetros reales de CONAF 2014–2024 en `scars.json` (IDE Minagri `if_magnitud_*`, 9 perímetros reales simplificados y 2 aproximaciones declaradas).~~ En `hecho/`.
 16. ~~[MAPA-183](hecho/MAPA-183.md) — Capa espacial Interfaz Urbano-Forestal (`riesgo_interfaz_tiled`) y respaldo `incendios_base` de CONAF.~~ En `hecho/`.
-17. [MAPA-181](MAPA-181.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).
+17. ~~[MAPA-181](hecho/MAPA-181.md) — Capa conmutable de infraestructura crítica en el mapa (OSM + MINSAL + MINEDUC).~~ En `hecho/`.
 18. [OFI-37](OFI-37.md) — Estaciones rurales Agromet INIA `api/v4` (requiere clave gratuita en [`PASOS_DUENO.md`](PASOS_DUENO.md)).
 
 ### P2 · Combustible, terreno 3D, viento fino, basemap propio y funciones de producto (esfuerzo M)

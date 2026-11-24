@@ -17,7 +17,8 @@
     ["Peligro inusual y área quemada · GWIS / Copernicus", "Capas WMS externas (ecmwf.ranking y nrt.ba.month) en https://maps.effis.emergency.copernicus.eu/gwis (https://gwis.jrc.ec.europa.eu/). © Unión Europea, CC BY 4.0; no reemplazan alertas oficiales."],
     ["Uso de suelo · ESA WorldCover 10 m (2021)", "Capa WMS v200 vía https://titiler.terrascope.be/wms (Sentinel-1/2). © ESA WorldCover project 2021 (https://esa-worldcover.org/), CC BY 4.0. No distingue plantaciones de bosque nativo."],
     ["Terreno 3D · AWS Terrain Tiles", "Teselas DEM Terrarium z0-15 en https://s3.amazonaws.com/elevation-tiles-prod/terrarium/ (AWS Open Data: https://registry.opendata.aws/terrain-tiles/, USGS/SRTM/Tilezen)."],
-    ["CONAF · GEPRIF Zonas de Interfaz", "Teselas vectoriales de interfaz urbano-forestal (riesgo_interfaz_tiled, 4 niveles) de CONAF GEPRIF (https://deigeprif.com/). Propiedad de CONAF; se cita con nombre y enlace."]
+    ["CONAF · GEPRIF Zonas de Interfaz", "Teselas vectoriales de interfaz urbano-forestal (riesgo_interfaz_tiled, 4 niveles) de CONAF GEPRIF (https://deigeprif.com/). Propiedad de CONAF; se cita con nombre y enlace."],
+    ["Infraestructura crítica · OpenStreetMap y DEIS MINSAL", "Capa opcional del mapa desde zoom 10: cuarteles de bomberos, escuelas, subestaciones y líneas eléctricas de alta tensión (>= 110 kV) de © OpenStreetMap contributors (https://www.openstreetmap.org/copyright, ODbL) y establecimientos vigentes de salud pública (hospitales, CESFAM, SAR, SAPU, SUR, CECOSF y postas rurales) de DEIS · MINSAL en datos.gob.cl (https://datos.gob.cl/dataset/3bf4cf7c-f638-4735-9a01-f65faae4beca, CC0 1.0). Solo referencia orientativa; en emergencia rigen los albergues y rutas oficiales."]
   ],
   "propios": [
     ["Peligro de incendio por comuna", "La regla 30-30-30 aplicada hora a hora sobre el pronóstico, junto al índice FWI que BRASA calcula. Los niveles «alto» y «moderado» son criterios propios, documentados en el código."],
