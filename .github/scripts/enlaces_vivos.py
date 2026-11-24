@@ -8,7 +8,8 @@ mueven una ruta, el vecino cae en un 404 y este run lo detecta.
 Cada enlace se pide con GET (varias de esas páginas responden 405 a HEAD), User-Agent propio y
 15 s de espera; solo se reintenta ante un error de red. Veredictos:
   OK    2xx (una redirección al mismo dominio, con o sin www, sigue siendo OK)
-  OJO   3xx a otro dominio, 401/403/429 (la página existe pero bloquea la sonda)
+  OJO   3xx a otro dominio, 401/403/418/429 (la página existe pero bloquea la sonda) o
+        timeout/error de red en portales estatales chilenos con geocerca conocida
   FALLA 404/410, 5xx, timeout o DNS
 Sale 0 solo sin FALLA. Con FALLA escribe `alerta.md` y deja `alerta=true` y `titulo` en
 GITHUB_OUTPUT para que el workflow abra el issue.
@@ -73,6 +74,12 @@ def extraer_todos(raiz: Path = ROOT) -> list[dict]:
     return [{"url": url, "fuentes": fuentes} for url, fuentes in vistos.items()]
 
 
+# Portales estatales chilenos que bloquean conexiones TLS desde fuera de Chile
+# (ej. runners de GitHub Actions en EE. UU.). Si responden 404/5xx siguen siendo FALLA;
+# solo un error de red/timeout se clasifica como OJO en vez de FALLA.
+GEOCERCA_CL = {"mifibe.gob.cl"}
+
+
 def _host(url: str) -> str:
     """Host en minúsculas, sin el prefijo www. (mismo sitio para este chequeo)."""
     host = (urlparse(url).hostname or "").lower()
@@ -86,7 +93,7 @@ def veredicto(url: str, status: int, final: str) -> tuple[str, str]:
         if otro and otro != _host(url):
             return "OJO", f"HTTP {status}, redirige a otro dominio ({otro})"
         return "OK", f"HTTP {status}"
-    if status in (401, 403, 429):
+    if status in (401, 403, 418, 429):
         return "OJO", f"HTTP {status} (bloquea la sonda)"
     if 300 <= status < 400:
         return "OJO", f"HTTP {status} sin destino final"
@@ -116,7 +123,10 @@ def revisar(enlaces: list[dict], sonda=sondear) -> list[dict]:
             status, final = sonda(enlace["url"])
             estado, detalle = veredicto(enlace["url"], status, final)
         except Exception as e:
-            estado, detalle = "FALLA", f"sin respuesta ({type(e).__name__})"
+            if _host(enlace["url"]) in GEOCERCA_CL:
+                estado, detalle = "OJO", f"sin respuesta desde fuera de Chile ({type(e).__name__}, posible geocerca)"
+            else:
+                estado, detalle = "FALLA", f"sin respuesta ({type(e).__name__})"
         resultados.append({**enlace, "estado": estado, "detalle": detalle})
     return resultados
 
@@ -141,7 +151,7 @@ botones cae en un error, así que hay que corregir el enlace o la cita:
 
 {lista}
 
-Los OJO son avisos (redirección a otro dominio, 401/403/429): revísalos si persisten.
+Los OJO son avisos (redirección a otro dominio, 401/403/418/429 o geocerca): revísalos si persisten.
 Mientras este issue siga abierto la revisión no crea otros; ciérralo cuando los enlaces vuelvan.{run}
 """
 

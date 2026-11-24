@@ -258,6 +258,22 @@ def test_worldcover_no_responde(monkeypatch):
     assert fs.check_worldcover()[0] == "FALLA"
 
 
+def test_wms_piden_margen_para_getcapabilities_grande(monkeypatch):
+    limites = {}
+
+    def fake_get(url, n=600_000):
+        limites[url] = n
+        return (200, WORLDCOVER_XML if "terrascope" in url else GWIS_XML)
+
+    monkeypatch.setattr(fs, "get", fake_get)
+    assert fs.check_worldcover()[0] == "OK"
+    assert fs.check_gwis()[0] == "OK"
+    wc_n = next(n for u, n in limites.items() if "terrascope" in u)
+    gwis_n = next(n for u, n in limites.items() if "effis" in u)
+    assert wc_n >= 2_000_000
+    assert gwis_n >= 1_000_000
+
+
 @pytest.mark.parametrize(
     ("tabla", "estado"),
     [

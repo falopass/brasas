@@ -371,7 +371,8 @@ def veredicto_gwis(body: str) -> tuple[str, str]:
 
 
 def check_gwis() -> tuple[str, str]:
-    st, body = get(GWIS_WMS + "?SERVICE=WMS&REQUEST=GetCapabilities")
+    # GetCapabilities de GWIS supera los 300 KB; margen amplio para evitar truncar XML.
+    st, body = get(GWIS_WMS + "?SERVICE=WMS&REQUEST=GetCapabilities", n=1_500_000)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
     return veredicto_gwis(body)
@@ -390,7 +391,8 @@ def veredicto_worldcover(body: str) -> tuple[str, str]:
 
 
 def check_worldcover() -> tuple[str, str]:
-    st, body = get(WORLDCOVER_WMS + "?SERVICE=WMS&REQUEST=GetCapabilities")
+    # El GetCapabilities de TiTiler Terrascope supera 1,6 MB; el tope por defecto (600 KB) trunca el XML.
+    st, body = get(WORLDCOVER_WMS + "?SERVICE=WMS&REQUEST=GetCapabilities", n=3_000_000)
     if st != 200:
         return "FALLA", f"HTTP {st}: {body[:160]}"
     return veredicto_worldcover(body)
