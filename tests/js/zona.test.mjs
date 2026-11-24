@@ -518,14 +518,14 @@ describe('cicatrices históricas (CONAF-HIST-10Y)', () => {
     assert.match(html, /2016-2017/);
     assert.match(html, /hectáreas/);
     assert.match(html, /cae dentro del dibujo orientativo/);
-    assert.match(html, /0,0 km \(dibujo orientativo\)/);
+    assert.match(html, /0 km \(dibujo orientativo\)/);
     assert.match(html, /href="https:\/\/www\.conaf\.cl\/"/);
     assert.match(html, /href="https:\/\/deigeprif\.com\/"/);
     assert.match(html, /de 2014 a 2024/);
     assert.match(html, /no es el perímetro oficial/);
     const htmlReal = String(cicatricesBlock({ lat: -35, lon: -71 }, catálogo({ ...cicatriz('real', 2023), perimeter: 'real' })));
     assert.match(htmlReal, /cae dentro del perímetro histórico simplificado/);
-    assert.match(htmlReal, /0,0 km \(perímetro histórico simplificado\)/);
+    assert.match(htmlReal, /0 km \(perímetro histórico simplificado\)/);
     const htmlLejos = String(cicatricesBlock({ lat: -35, lon: -70.6 }, catálogo({ ...cicatriz('real-lejos', 2023), perimeter: 'real' })));
     assert.match(htmlLejos, /km del perímetro histórico simplificado/);
     assert.match(htmlLejos, /km \(perímetro histórico simplificado\)/);
