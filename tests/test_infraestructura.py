@@ -155,16 +155,16 @@ def test_dedupe_points_latitud_austral_frontera_celda():
 
 
 def test_simplify_line_conserva_extremos_y_descarta_fuera_de_chile():
-    dentros = [(-70.0, -33.0), (-70.05, -33.02), (-70.1, -33.04)]
+    dentros = [(-70.65, -33.45), (-70.60, -33.43), (-70.55, -33.41)]
     out = simplify_line(dentros)
     assert len(out) >= 2
-    assert out[0] == [-70.0, -33.0], "simplify_line debe conservar el extremo inicial"
-    assert out[-1] == [-70.1, -33.04], "simplify_line debe conservar el extremo final"
+    assert out[0] == [-70.65, -33.45], "simplify_line debe conservar el extremo inicial"
+    assert out[-1] == [-70.55, -33.41], "simplify_line debe conservar el extremo final"
 
-    # Un vértice fuera de Chile se descarta antes de simplificar.
-    con_extranjero = simplify_line([(-70.0, -33.0), (0.0, 0.0), (-70.1, -33.04)])
+    # Un vértice fuera de Chile (incluidos países vecinos como Mendoza) se descarta antes de simplificar.
+    con_extranjero = simplify_line([(-70.65, -33.45), (-68.84, -32.89), (0.0, 0.0), (-70.55, -33.41)])
     assert all(_en_chile(lon, lat) for lon, lat in con_extranjero)
-    assert con_extranjero[0] == [-70.0, -33.0] and con_extranjero[-1] == [-70.1, -33.04]
+    assert con_extranjero[0] == [-70.65, -33.45] and con_extranjero[-1] == [-70.55, -33.41]
 
     # Una línea enteramente fuera de Chile no deja nada.
     assert simplify_line([(0.0, 0.0), (1.0, 1.0)]) == []
