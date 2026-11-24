@@ -88,7 +88,7 @@ if (!html.includes('8 campamentos') || !html.includes('626 hogares')) throw new 
 if (!html.includes('https://geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer')) {
   throw new Error('sin enlace MINVU');
 }
-if (!html.includes('MINVU · Catastro de Campamentos')) throw new Error('sin rotulo MINVU');
+if (!html.includes('Departamento de Asentamientos Precarios (DAP-MINVU)')) throw new Error('sin rotulo DAP-MINVU');
 const partes = { ha_interfaz: 2735.3, viviendas: 75372, n_hogares: 626 };
 const idx = await fresco.loadExposureIndex();
 if (!idx['1101'] || !cerca(idx['1101'].factor, fresco.exposureFactor(partes))) throw new Error('indice ' + JSON.stringify(idx['1101']));
@@ -133,7 +133,7 @@ def test_exposure_consume_el_catastro():
     assert "export async function loadExposureIndex(" in texto
     assert "export function exposureFactor(" in texto
     assert "n_campamentos" in texto and "n_hogares_campamentos" in texto
-    assert "MINVU · Catastro de Campamentos" in texto
+    assert "Departamento de Asentamientos Precarios (DAP-MINVU)" in texto
     assert "geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer" in texto
 
 

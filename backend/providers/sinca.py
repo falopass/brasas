@@ -6,10 +6,12 @@ parámetro (`tableRow`: valor, ICAP, estado y hora). Una sola descarga cacheada 
 los lugares, igual que la red EMA de la DMC.
 
 La hora de `tableRow.datetime` es hora de Chile («2026-10-23 22:00»), no UTC: se interpreta
-en `America/Santiago`, que resuelve solo el UTC-3/UTC-4 del día. Los valores son **preliminares**
-hasta la validación del MMA, como declara el propio portal: por eso `status`/el aviso viajan
-con el dato. Si la fuente falla o no hay estación cerca, sale null: jamás un valor inventado
-(OFI-10, decisión del dueño de integrar con atribución y enlace).
+en `America/Santiago`, que resuelve solo el UTC-3/UTC-4 del día. Los valores son **preliminares** hasta la validación del Ministerio del Medio Ambiente de Chile,
+como declara el propio portal: por eso `status`/el aviso viajan con el dato. Según la Carta
+N° 02853/2026 del MMA (23-11-2026, folio AW002T0016097), los datos no usan licencia Creative
+Commons y pueden republicarse citando la autoría con el Ministerio del Medio Ambiente de Chile
+(sin API pública por el momento). Si la fuente falla o no hay estación cerca, sale null: jamás
+un valor inventado (OFI-10).
 
 Si `SINCA_PROXY_URL` está definida, se intenta antes que la URL directa. Si la
 petición en vivo falla, se usa el snapshot de `SINCA_SNAPSHOT_PATH` solo cuando
@@ -42,7 +44,7 @@ from backend.providers import _retry
 
 ROOT = Path(__file__).resolve().parents[2]
 RED_URL = "https://sinca.mma.gob.cl/index.php/json/listadomapa2k19/"
-SOURCE = "SINCA · Ministerio del Medio Ambiente (medición preliminar)"
+SOURCE = "SINCA · Ministerio del Medio Ambiente de Chile (medición preliminar)"
 SOURCE_URL = "https://sinca.mma.gob.cl/"
 CHILE_TZ = ZoneInfo("America/Santiago")
 

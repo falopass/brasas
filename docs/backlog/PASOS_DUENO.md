@@ -22,21 +22,31 @@ _Revisado contra `main` el 18-11-2026: decisiones y credenciales de la revisión
 ---
 
 Lo que es código vive en el backlog (`docs/backlog/README.md`). El 24-10 se integraron
-las tres fuentes de gobierno (SENAPRED, SINCA, MINVU) con atribución y enlace; de eso solo
-queda **esperar las respuestas** de las consultas de licencia/acceso que ya quedaron enviadas
-(o por enviar) por los canales oficiales:
+las tres fuentes de gobierno (SENAPRED, SINCA, MINVU) con atribución y enlace; **las tres
+respuestas oficiales ya llegaron y quedaron registradas** en `docs/FUENTES.md` y
+`web/data/licencias.json`:
 
-- **SENAPRED — decidido el 3-11-2026.** Datos públicos del Estado: se sigue usando el acceso
-  anónimo del portal sin pedir feed formal. Si SENAPRED lo cambia o lo restringe, la capa se
-  degrada al enlace oficial (OFI-04) y ahí sí convendría la solicitud por Transparencia.
-- **MMA / SINCA** — consulta de licencia de reutilización de los datos de SINCA por
-  Transparencia en <https://mma.gob.cl/>. Si responden con licencia (o la niegan), se anota
-  en `docs/FUENTES.md` junto a la fila de SINCA. Además hay un bloqueo técnico: el host no
-  responde desde la red de Cloudflare (probable geocerca), así que hoy la capa entrega
-  `air:null` — si la respuesta habilita un canal alcanzable, queda lista.
-- **MINVU — respondió el 3-11-2026.** La información del Catastro de Campamentos es de uso
-  público; la citación «Ministerio de Vivienda y Urbanismo. (2026). Sentamientos Precarios
-  [Servicio de mapas]» ya quedó anotada en `docs/FUENTES.md`. Nada pendiente.
+- **SENAPRED — Oficio N° 2236 (10-11-2026, folio `AB004T0002166`, Directora Nacional).**
+  Confirma que SENAPRED no cuenta con servicios web, API ni feed (JSON, RSS o CAP) ni prevé
+  habilitarlos en el corto plazo, remite a <https://senapred.cl/alertas/> (24/7) y no recomienda
+  extracción directa automatizada (web scraping) desde su sitio web por estabilidad y continuidad
+  del portal. Por decisión del dueño (24-11-2026) se conserva por ahora la lectura compartida en
+  caché (`backend/providers/senapred.py`, 1 consulta cada 10 min al AppSync del portal); si
+  SENAPRED lo cambia o lo restringe, la capa se degrada automáticamente al enlace oficial (OFI-04).
+- **MMA / SINCA — Carta N° 02853/2026 (23-11-2026, folio `AW002T0016097`, Subsecretario del
+  Medio Ambiente).** Confirma que los datos de SINCA no se publican bajo licencia Creative
+  Commons y que **para republicarlos debe citarse la autoría con el Ministerio del Medio Ambiente
+  de Chile**; por el momento tampoco existe una API pública (los históricos se descargan según el
+  tutorial oficial en `sinca.mma.gob.cl`). La cita completa quedó aplicada en la interfaz, la API,
+  `web/data/licencias.json` y `docs/FUENTES.md`. Persiste solo el bloqueo técnico de red desde
+  Cloudflare hacia `sinca.mma.gob.cl` (cubierto por `SINCA_PROXY_URL` + snapshot en #792).
+- **MINVU — Respuesta definitiva SIAC/DPH (04-11-2026, complementa correo IDE MINVU del
+  03-11-2026).** Confirma que el Catastro Nacional de Campamentos es administrado por el
+  **Departamento de Asentamientos Precarios (DAP-MINVU)**, que su licencia y condiciones
+  corresponden al MINVU y que al reutilizar los datos **debe reconocerse expresamente al
+  Departamento de Asentamientos Precarios (DAP-MINVU) como fuente oficial**. Atribución aplicada
+  en la interfaz (`exposure.js`), `web/data/campamentos.json`, `web/data/licencias.json` y
+  `docs/FUENTES.md`. Nada pendiente.
 - **CONAF — decidido el 3-11-2026.** Datos públicos del Estado: se usan citando a CONAF, sin
   pedir autorización formal; la carta de OFI-03 quedó archivada sin enviar
   (`docs/cartas/2026-10-carta-geprif.md`). Con la decisión se encendió también el perímetro

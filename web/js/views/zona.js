@@ -720,7 +720,7 @@ export function airLine(data) {
     icapPart = html`, ${dual(`calidad del aire (promedio de 24 h): ${a.status}`, a.status)}`;
   }
   const respaldo = a.source_mode === 'snapshot' ? ' (respaldo reciente)' : '';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a>${respaldo}. Medición preliminar del MMA, no un pronóstico.</p>`;
+  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a>${respaldo}. Medición preliminar del Ministerio del Medio Ambiente de Chile, no un pronóstico.</p>`;
 }
 
 /* OFI-04: «La autoridad informa» — las alertas vigentes de SENAPRED que nombran a la

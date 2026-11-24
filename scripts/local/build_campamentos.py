@@ -2,9 +2,11 @@
 
 Fuente oficial: MINVU, capa `Catastros_campamentos` del FeatureServer público del Geoportal
 (`geoide.minvu.cl/server/rest/services/Catastros/Catastros_campamentos/FeatureServer`),
-el Catastro Nacional de Campamentos. El ítem no declara licencia, pero IDE MINVU respondió
-el 3-11-2026 que la información es de uso público; la citación va escrita en el JSON y en
-`docs/FUENTES.md`.
+el Catastro Nacional de Campamentos. El MINVU (SIAC/DPH, respuesta definitiva del 4-11-2026)
+confirmó que el catastro es administrado por el Departamento de Asentamientos Precarios
+(DAP-MINVU) y que al reutilizar los datos debe reconocerse expresamente al Departamento de
+Asentamientos Precarios (DAP-MINVU) como fuente oficial; la citación va escrita en el JSON y
+en `docs/FUENTES.md`.
 
 Uso:  python scripts/local/build_campamentos.py [--refresh]
 
@@ -45,9 +47,9 @@ PARAMS = {"where": "EST='VIGENTE'", "returnGeometry": "false", "f": "json",
           "orderByFields": "COM", "outFields": "COM,HOGARESCAT",
           "resultRecordCount": 2000}
 
-LICENSE = ("Uso público según respuesta de IDE MINVU (3-11-2026); se cita: «Ministerio de "
-           "Vivienda y Urbanismo. (2026). Sentamientos Precarios [Servicio de mapas]». "
-           "Solo el agregado por comuna.")
+LICENSE = ("Uso público (MINVU, respuesta SIAC/DPH del 4-11-2026); fuente oficial: "
+           "Departamento de Asentamientos Precarios (DAP-MINVU), Catastro Nacional de "
+           "Campamentos. Solo el agregado por comuna.")
 
 
 def download() -> dict:
