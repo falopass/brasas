@@ -65,7 +65,7 @@ describe('airLine (OFI-35 · SINCA horario, MP10 y CO)', () => {
     assert.ok(out.includes('calidad del aire (promedio de 24 h): Alerta'));
     assert.ok(out.includes('href="https://sinca.mma.gob.cl/"'));
     assert.ok(out.includes('target="_blank"') && out.includes('rel="noopener"'));
-    assert.ok(out.includes('Medición preliminar del MMA, no un pronóstico.'));
+    assert.ok(out.includes('Medición preliminar del Ministerio del Medio Ambiente de Chile, no un pronóstico.'));
     assert.ok(!out.includes('respaldo reciente'), 'en modo live no marca respaldo');
     assert.ok(!out.includes('undefined') && !out.includes('NaN'));
   });

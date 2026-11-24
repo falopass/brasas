@@ -537,7 +537,7 @@ function rainCallout(r, source) {
 
 /* MP2,5 pronosticado (CAMS): el humo de un incendio lejano también afecta a personas sensibles.
  * OFI-10: junto al pronóstico se enlaza la medición real del SINCA (Ministerio del Medio
- * Ambiente); BRASA no copia sus valores porque el portal no declara licencia.
+ * Ambiente de Chile; Carta N° 02853/2026: republicación citando autoría con el MMA de Chile).
  * RISK-25: la señal `humo` / `polvo` cruza MP2,5, CO, polvo y MP10 de CAMS para separar
  * humo de combustión (sin distinguir leña de incendio) de polvo en suspensión. */
 export function airCallout(air) {
@@ -576,7 +576,7 @@ export function airCallout(air) {
     ${dual(`Hoy hasta ${fmt(air.pm25_today_max)} · mañana hasta ${fmt(air.pm25_tomorrow_max)}.`,
       `Máximo por día local: hoy ${fmt(air.pm25_today_max)} · mañana ${fmt(air.pm25_tomorrow_max)}. Referencia ${air.guideline?.name || 'OMS'} (24 h): ${fmtNum(limit)} ${unit}.`)}
     ${healthNote}${signalLine}${techExtra.length ? html`<span class="tiny muted x-tech" style="display:block;margin-top:4px">Máximos de hoy (CAMS): ${techExtra.join(' · ')}.</span>` : ''}
-    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico del modelo CAMS vía Open-Meteo, no una medición oficial (las estaciones son del SINCA, del Ministerio del Medio Ambiente). Fuente: ${air.source?.url ? html`<a href="${air.source.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>` : air.source?.name || 'CAMS vía Open-Meteo'}${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span>
+    <span class="tiny muted" style="display:block;margin-top:4px">Es un pronóstico del modelo CAMS vía Open-Meteo, no una medición oficial (las estaciones son del SINCA, del Ministerio del Medio Ambiente de Chile). Fuente: ${air.source?.url ? html`<a href="${air.source.url}" target="_blank" rel="noopener">${air.source?.name || 'CAMS vía Open-Meteo'} ↗</a>` : air.source?.name || 'CAMS vía Open-Meteo'}${air.fetched_at ? ` · consultado ${ago(air.fetched_at)}` : ''}</span>
     <a class="tiny src-linea" style="margin-top:4px" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">Ver la calidad del aire medida en SINCA ↗</a></div>`;
 }
 
