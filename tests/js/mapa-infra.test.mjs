@@ -360,7 +360,9 @@ describe('loadInfra: el lote del encuadre, completo o nada (REND-02 / MAPA-181)'
     responder(cap, urlTesela('t/-36_-71'), { body: tesela([fila(-71.4, -35.8)], [linea('l1', tramo)]) });
     await lote;
     const datos = publicados(cap);
-    assert.equal(datos['infra-puntos'].features.length, 3);
+    assert.equal(datos['infra-puntos'].features.length, 2, 'hay dos filas de puntos; los vértices de la línea no crean puntos');
+    assert.deepEqual(datos['infra-puntos'].features.map((f) => f.geometry.coordinates).sort((a, b) => a[0] - b[0]),
+      [[-71.9, -35.9], [-71.4, -35.8]]);
     assert.equal(datos['infra-lineas'].features.length, 1, 'dos teselas vecinas, una sola línea: manda su id');
     assert.deepEqual(datos['infra-lineas'].features[0].geometry.coordinates, tramo);
     assert.equal(datos['infra-lineas'].features[0].properties.kv, 110000);

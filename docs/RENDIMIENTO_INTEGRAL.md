@@ -351,6 +351,14 @@ la partición. No cambian las fuentes, licencias, precisión ni cobertura.
 La medición comparada y el peso del build servido siguen pendientes del CI;
 las cifras de archivos en disco no prueban una mejora del navegador.
 
+El [primer CI estándar](https://github.com/falopass/brasas/actions/runs/45612789739)
+aprobó pytest y flujos de punta a punta, pero falló una prueba JS que esperaba
+tres puntos de un escenario con dos filas, y la revisión a 320 px con movimiento
+reducido detectó desborde durante la salida del esqueleto. La prueba ahora
+comprueba las dos coordenadas y la línea deduplicada; la salida elimina la escala
+solo con movimiento reducido, sin relajar el detector. Revisión UX estática
+aprobada; la reproducción y el peso de la revisión corregida siguen pendientes de CI.
+
 ### Resultado de la segunda tanda
 
 [PR #987](https://github.com/falopass/brasas/pull/987), candidato `cd6ee70`,

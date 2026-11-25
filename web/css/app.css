@@ -1075,6 +1075,7 @@ details.fold ol.install-steps li::before { content: none; }
 /* Carga: la brasa del esqueleto se abre y deja ver el mapa. */
 #map-skel.fuera { opacity: 0; transition: opacity .5s var(--ease-in-out); }
 #map-skel.fuera .skel-dot { animation: none; transform: scale(7); transition: transform .5s var(--ease); }
+@media (prefers-reduced-motion: reduce) { #map-skel.fuera .skel-dot { transform: none; } }
 
 .maplibregl-map { font-family: var(--text); }
 

@@ -4,6 +4,7 @@
  * Mismo estilo que motion.test.mjs: matchMedia, rAF y temporizadores simulados. */
 import { afterEach, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { armEnter, countUp, watchView } from '../../web/js/motion.js';
 
 let clock;
@@ -15,6 +16,11 @@ let reduceMatches; // lo que responde matchMedia
 
 const GLOBALES = ['matchMedia', 'requestAnimationFrame', 'setTimeout', 'MutationObserver'];
 const previos = {};
+
+test('el esqueleto del mapa no se amplía al salir con movimiento reducido', () => {
+  const css = readFileSync(new URL('../../web/css/app.css', import.meta.url), 'utf8');
+  assert.match(css, /@media\s*\(prefers-reduced-motion:\s*reduce\)\s*\{\s*#map-skel\.fuera\s+\.skel-dot\s*\{\s*transform:\s*none\s*;\s*\}\s*\}/);
+});
 
 /* Los hooks viven dentro de este describe: index.js importa todas las suites en un
  * solo proceso y un hook de nivel raíz alcanzaría también a las pruebas ajenas. */
