@@ -26,9 +26,9 @@ let mountSeq = 0;
 let soltar = [];
 let layersEl = null;
 // MAPA-184: respaldo sin señal y descarga de zona visible bajo demanda.
-let autoCambioMapaOfflineHecho = false;
-let guardandoZonaOffline = false;
-let descargaZonaCtrl = null;
+let autoOfflineHecho = false;
+let guardandoZona = false;
+let descargaCtrl = null;
 let smokeMeta = null;
 // Alertas SENAPRED de la capa nacional (OFI-207): {code: [alertas]} y su marca de descarga.
 let senapredPorCode = {};
@@ -68,18 +68,12 @@ function layerSources() {
   }
   const risk = store.get('risk');
   if (layers.risk && risk) parts.push(`peligro: Open-Meteo, cálculo BRASA${risk.computed_at ? `, ${ago(risk.computed_at)}` : ''}`);
-  if (layers.aire && smokeMeta?.generated_at) {
-    const fuenteHumo = smokeMeta.aod_available ? 'NOAA GOES-19 (ADPF + AODF)' : 'NOAA GOES-19';
-    parts.push(`humo: ${fuenteHumo}, ${ago(smokeMeta.generated_at)}`);
-  }
+  if (layers.aire && smokeMeta?.generated_at) parts.push(`humo: ${smokeMeta.aod_available ? 'NOAA GOES-19 (ADPF + AODF)' : 'NOAA GOES-19'}, ${ago(smokeMeta.generated_at)}`);
   if (layers.senapred) parts.push(`alertas: SENAPRED${senapredFetchedAt ? `, ${ago(senapredFetchedAt)}` : ''}`);
   if (layers.snaspe) parts.push('Áreas protegidas del Estado (SNASPE · CONAF)');
   if (layers.wui) parts.push('interfaz urbano-forestal: CONAF GEPRIF');
   if (layers.infra) parts.push('infraestructura crítica: OpenStreetMap (ODbL) y DEIS · MINSAL (CC0)');
-  if (layers.viento) {
-    const resViento = vientoInfo?.tieneFina === false ? 'ECMWF IFS 1°' : 'ECMWF IFS 0,25° centro-sur / 1° país';
-    parts.push(`viento: Open-Meteo (${resViento})${vientoEdadTxt ? `, ${vientoEdadTxt}` : ''}`);
-  }
+  if (layers.viento) parts.push(`viento: Open-Meteo (${vientoInfo?.tieneFina === false ? 'ECMWF IFS 1°' : 'ECMWF IFS 0,25° centro-sur / 1° país'})${vientoEdadTxt ? `, ${vientoEdadTxt}` : ''}`);
   // MAPA-180: la imagen satelital real de NASA GIBS (teselas WMTS, sin clave).
   if (layers.gibs_goes) parts.push(`imagen GOES: NASA GIBS, ${GIBS.goes.corto}`);
   if (layers.gibs_viirs) parts.push(`imagen VIIRS: NASA GIBS, ${GIBS.viirs.corto}`);
@@ -108,16 +102,13 @@ function legend() {
   const activas = CAPAS.filter((c) => c.key !== 'places' && layers[c.key]).length;
   const compacta = activas > 2;
   leg.classList.toggle('legend-compact', compacta);
-  const hayContenido = Boolean(
-    layers.focos || layers.incendios || layers.reports || layers.risk || layers.rain || layers.senapred
-    || layers.relieve || layers.terreno3d || layers.hulls || layers.lightning || layers.scars || layers.snaspe || layers.wui || layers.infra || layers.viento
-    || layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod || layers.gwis_ranking || layers.gwis_ba || layers.worldcover || layers.aire,
-  );
-  if (!hayContenido) { leg.innerHTML = ''; return; }
+  // Sin capas activas (los lugares no pintan leyenda) no hay nada que mostrar.
+  if (!activas) { leg.innerHTML = ''; return; }
   const themeKey = store.get('theme');
+  const risk = store.get('risk');
   const smokePal = SMOKE_DENSITY_COLOR[themeKey] || SMOKE_DENSITY_COLOR.dark;
   const smokeBase = SMOKE_COLOR[themeKey] || SMOKE_COLOR.dark;
-  const smokeSoloMascara = Boolean(smokeMeta && !smokeMeta.aod_available);
+  const soloMascara = Boolean(smokeMeta && !smokeMeta.aod_available);
   const detalleFocos = layers.focos
     ? html`<details class="legend-note movil-ok"><summary>Cómo se leen los puntos</summary>${dual('El tamaño sube con la potencia del calor. De lejos los focos se agrupan: el número cuenta los puntos de calor que están a la vista (por defecto, también los dudosos), no incendios. El anillo de colores es un posible incendio: tócalo para ver su ficha. De cerca, su contorno y su nombre marcan la zona aproximada donde se vio calor: no es el perímetro oficial.', 'Radio por FRP; bajo zoom 7 decimación por celda con conteo, más un anillo por incidente abierto (color = estado). Desde zoom 7 el contorno de la huella y desde zoom 8 su etiqueta (zona aproximada, no perímetro oficial) que abren la ficha del incidente.')}</details>`
     : '';
@@ -138,7 +129,7 @@ function legend() {
     ${layers.risk ? html`<div class="legend-row legend-row-gap">${Object.entries(RISK).map(([k, r]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${RISK_COLORS[k]}"></span>${r.label}</span>`)}</div>
       <div class="legend-note movil-ok">${dual('Peligro por comuna: cada nivel tiene además su trama.', 'Peligro por comuna: cada nivel se distingue también por su trama, no solo por el color.')}</div>` : ''}
     ${layers.rain ? html`<div class="legend-row legend-row-gap">${RAIN_LEVELS.map(([k, label]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${RAIN_COLORS[k]}"></span>${label}</span>`)}</div>
-      <div class="legend-note movil-ok">${dual('Lluvia desde junio comparada con un año normal. Es contexto del combustible, no cambia el peligro de hoy.', 'Anomalía jun–hoy vs. normal 1991-2020. Contexto del combustible, no cambia el peligro de hoy.')}${store.get('risk')?.rain_source?.name ? ` Fuente: ${store.get('risk').rain_source.name}.` : ''}</div>` : ''}
+      <div class="legend-note movil-ok">${dual('Lluvia desde junio comparada con un año normal. Es contexto del combustible, no cambia el peligro de hoy.', 'Anomalía jun–hoy vs. normal 1991-2020. Contexto del combustible, no cambia el peligro de hoy.')}${risk?.rain_source?.name ? ` Fuente: ${risk.rain_source.name}.` : ''}</div>` : ''}
     ${layers.senapred ? html`<div class="legend-row legend-row-gap">${SENAPRED_TIPOS.map(([k, label]) => html`<span class="legend-item"><span class="sw sw-fill" data-c="${SENAPRED_COLORS[k]}"></span>${label}</span>`)}</div>
       <div class="legend-note movil-ok">Alertas oficiales de SENAPRED. BRASA no emite alertas.</div>` : ''}
     ${layers.relieve ? html`<div class="legend-note movil-ok legend-row-gap">${isDemFallbackAws()
@@ -185,12 +176,12 @@ function legend() {
     ${layers.gibs_viirs ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs"></span>${dual('Imagen de color real de VIIRS NOAA-20', 'VIIRS NOAA-20 Corrected Reflectance True Color')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
     ${layers.gibs_aod ? html`<div class="legend-row legend-row-gap"><span class="legend-item"><span class="sw sw-sq sw-gibs-aod"></span>${dual('Aerosoles (AOD) de MODIS Terra', 'MODIS Terra Aerosol Optical Depth')} · ${dual('del día', `día UTC (${gibsDia})`)}</span></div>` : ''}
     ${layers.aire ? html`<div class="legend-row legend-row-gap">
-      ${smokeSoloMascara
+      ${soloMascara
         ? html`<span class="legend-item"><span class="sw sw-sq sw-smoke-tenue" data-c="${smokeBase}"></span>${dual('Hay humo (sin medir su densidad)', 'Máscara ADPF sin AODF')}</span>`
         : html`<span class="legend-item"><span class="sw sw-sq sw-smoke-tenue" data-c="${smokePal.tenue}"></span>Humo tenue</span>
       <span class="legend-item"><span class="sw sw-sq sw-smoke-moderado" data-c="${smokePal.moderado}"></span>Humo moderado</span>
       <span class="legend-item"><span class="sw sw-sq sw-smoke-denso" data-c="${smokePal.denso}"></span>Columna densa</span>`}</div>
-      ${smokeSoloMascara ? html`<div class="legend-note movil-ok">${dual('Ahora es de noche o hay nubes: se ve dónde hay humo, pero no cuán denso es.', 'Sin ABI-L2-AODF válido (noche/nubes): solo máscara ABI-L2-ADPF.')}</div>` : ''}
+      ${soloMascara ? html`<div class="legend-note movil-ok">${dual('Ahora es de noche o hay nubes: se ve dónde hay humo, pero no cuán denso es.', 'Sin ABI-L2-AODF válido (noche/nubes): solo máscara ABI-L2-ADPF.')}</div>` : ''}
       <div class="legend-note movil-ok">${dual('Es humo en el aire visto de día por el satélite GOES-19 (más opaco = columna más densa), no fuego confirmado. De noche solo marca si hay humo, sin medir su densidad.', 'GOES-19 ABI-L2-ADPF (máscara) + ABI-L2-AODF diurno (espesor óptico 550 nm, DQF alta/media: tenue <0,4 · moderado 0,4–1,0 · denso ≥1,0). Aerosol, no detección térmica.')}</div>` : ''}
     ${bloqueSecundario}
     ${layers.focos ? html`<div class="legend-note esencial">${dual('Calor no siempre es incendio. Los puntos pálidos son dudosos.', 'Un foco de calor no confirma un incendio. Los puntos tenues tienen confianza baja.')}</div>` : ''}`);
@@ -202,8 +193,41 @@ function legend() {
 const SERVICE_LABEL = { assembly_point: 'Punto de encuentro', hospital: 'Hospital', clinic: 'Centro de salud', fire_station: 'Cuartel de Bomberos', police: 'Carabineros' };
 // MAPA-181: etiqueta en claro de cada tipo de infraestructura crítica (`k` del archivo estático).
 const INFRA_LABEL = { b: 'Cuartel de Bomberos', s: 'Salud pública', e: 'Escuela (posible albergue)', t: 'Subestación eléctrica' };
-// El archivo estático (~1,3 MB) se descarga una sola vez por sesión, al prender la capa.
-let infraCargada = false;
+// REND-02 (MAPA-181): infraestructura crítica en teselas de 1° del encuadre visible (antes: un
+// archivo de país entero, ~1,3 MB). El índice («indice», pequeño) y cada tesela («t/lat_lon»)
+// se piden una vez por sesión: promesa compartida por clave, que queda guardada si llegó bien
+// y se suelta si falló, para reintentarla al mover el mapa.
+const infraVuelo = new Map(), infraPuntos = [], infraLineas = new Map();
+// Dato acumulado y aún sin publicar (p. ej. si el lote cerró con la vista desmontada o incompleto).
+// `infraSeq` numera los lotes: un fallo de un encuadre viejo no manda sobre un lote más nuevo.
+let infraPend = false, infraSeq = 0;
+
+const pedirInfra = (clave) => {
+  const vuela = infraVuelo.get(clave);
+  if (vuela) return vuela;
+  const p = fetch(`/web/data/infraestructura/${clave}.json`).then(async (res) => {
+    const body = await res.json();
+    if (!res.ok) throw new Error('sin datos');
+    if (clave === 'indice') return body.teselas; // sin teselas: undefined → falla y se reintenta
+    if (!Array.isArray(body?.rows) || !Array.isArray(body?.lines)) throw new Error('sin tesela');
+    // Líneas antes que puntos: se deduplican por id y los puntos llegan atómicos (map), por si
+    // la tesela falla a mitad: nada queda a medias y el reintento no duplica.
+    for (const l of body.lines) infraLineas.set(l.i, feat({ type: 'LineString', coordinates: l.coordinates }, { kv: l.kv, n: l.n || '', s: l.s || 'osm' }));
+    infraPuntos.push(...body.rows.map(([lon, lat, k, n, s, d]) => feat({ type: 'Point', coordinates: [lon, lat] }, { k, n, s, d })));
+    infraPend = true;
+    return true;
+  }).catch(() => null).then((ok) => { if (!ok) infraVuelo.delete(clave); return ok; });
+  infraVuelo.set(clave, p);
+  return p;
+};
+
+// Publica lo acumulado (las teselas del encuadre y las de encuadres anteriores ya pedidas).
+function publicaInfra() {
+  if (!mounted || !layers.infra || !infraPend) return;
+  infraPend = false;
+  setData('infra-puntos', { type: 'FeatureCollection', features: infraPuntos });
+  setData('infra-lineas', { type: 'FeatureCollection', features: [...infraLineas.values()] });
+}
 
 async function loadOfficial() {
   try {
@@ -213,16 +237,24 @@ async function loadOfficial() {
     officialError = null;
     store.set('official', data);
     pintarOficiales();
-    if (habiaFallo && viewEl) keepPlace(viewEl, () => render(viewEl, {})); // limpia el «no pudimos cargar»
+    if (habiaFallo) repintar(); // limpia el «no pudimos cargar»
   } catch (err) {
     // El bloque nombra qué falló (VIS-03); queda lo último que llegó.
     officialError = err;
-    if (mounted && viewEl) keepPlace(viewEl, () => render(viewEl, {}));
+    repintar();
   }
 }
 
 /** Ancla de la ficha: en un punto, su coordenada; en un polígono, donde cayó el toque. */
 const puntoDe = (feature, lngLat) => (feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
+// Feature GeoJSON corto y repintado del panel sin perder el lugar (REND-02: compacta el bundle).
+const feat = (geometry, properties) => ({ type: 'Feature', geometry, properties });
+const repintar = () => { if (mounted && viewEl) keepPlace(viewEl, () => render(viewEl, {})); };
+// Enlaza un evento a todos los que calzan con el selector (on) o solo al primero (on1).
+const on = (root, sel, ev, fn) => root.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, () => fn(el)));
+const on1 = (root, sel, ev, fn) => root.querySelector(sel)?.addEventListener(ev, fn);
+// Marca `aria-pressed` en un control; lo comparten chips, presets y fondos.
+const setPressed = (el, val) => el?.setAttribute('aria-pressed', String(val));
 
 function bindMap() {
   const map = getMap();
@@ -330,11 +362,10 @@ function bindMap() {
     if (!layers.infra) return;
     const p = feature.properties || {};
     const [lon, lat] = feature.geometry?.coordinates || [];
-    const coordsOk = Number.isFinite(lat) && Number.isFinite(lon);
     abrirPopup(lngLat, html`<b>${p.n || INFRA_LABEL[p.k] || 'Infraestructura crítica'}</b>
       <div class="tiny muted">${INFRA_LABEL[p.k] || 'Infraestructura'}${p.d ? ` · ${p.d}` : ''}</div>
       ${p.k === 'e' ? html`<p class="small">Posible albergue de referencia. En emergencia verifica siempre los albergues habilitados por SENAPRED y el municipio.</p>` : ''}
-      ${coordsOk ? html`<p class="small"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}" target="_blank" rel="noopener">Cómo llegar</a></p>` : ''}
+      ${coordsOk({ lat, lon }) ? html`<p class="small"><a href="https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}" target="_blank" rel="noopener">Cómo llegar</a></p>` : ''}
       <div class="tiny muted">${p.s === 'deis'
         ? html`Fuente: <a href="https://datos.gob.cl/dataset/3bf4cf7c-f638-4735-9a01-f65faae4beca" target="_blank" rel="noopener">DEIS · MINSAL</a> (CC0 1.0).`
         : html`Fuente: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> (ODbL).`}</div>`, '260px');
@@ -393,7 +424,7 @@ async function loadIncidents() {
 /* MAPA-163: cada lote nuevo de focos repide incidentes y CONAF — máx. 1/min y solo con la
  * pestaña visible (los focos ya se actualizan solos cada 2 min; el resto los acompaña). */
 const REFRESCO_INCIDENTES_MS = 60_000;
-let ultimoRefrescoIncidentes = 0;
+let ultimoRefresco = 0;
 // Vista de país con que nace el mapa (initMap) y a la que vuelve «Todo Chile».
 const PAIS = [-71.2, -35.4, 4.6];
 /* Abre donde está el calor, una vez por carga de la página: si la cámara sigue en la vista
@@ -420,8 +451,8 @@ function abrirDondeHayCalor() {
 function alLlegarObservaciones() {
   if (!mounted || document.visibilityState !== 'visible') return;
   const ahora = Date.now();
-  if (ahora - ultimoRefrescoIncidentes < REFRESCO_INCIDENTES_MS) return;
-  ultimoRefrescoIncidentes = ahora;
+  if (ahora - ultimoRefresco < REFRESCO_INCIDENTES_MS) return;
+  ultimoRefresco = ahora;
   loadIncidents();
   loadOfficial();
 }
@@ -460,12 +491,9 @@ async function loadLightning(input, ticket) {
     }
     setData('lightning', body);
   } catch (err) {
-    if (ticket !== undefined && capaTicket.lightning !== ticket) return; // una conmutación más nueva manda
-    layers.lightning = false;
-    if (input) input.checked = false;
+    if (!apagarCapa('lightning', input, ticket)) return;
     setData('lightning', EMPTY_FC);
-    applyLayers();
-    toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar los rayos.' : err.message, 'error');
+    toast(msjRed(err, 'no se pudieron cargar los rayos'), 'error');
   }
 }
 
@@ -481,12 +509,9 @@ async function loadSenapred(input, ticket) {
     setSenapred(tipos);
     legend();
   } catch (err) {
-    if (ticket !== undefined && capaTicket.senapred !== ticket) return;
-    layers.senapred = false;
-    if (input) input.checked = false;
+    if (!apagarCapa('senapred', input, ticket)) return;
     senapredPorCode = {};
-    applyLayers();
-    toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudieron cargar las alertas.' : err.message, 'error');
+    toast(msjRed(err, 'no se pudieron cargar las alertas'), 'error');
     syncCapaInputs();
     legend();
   }
@@ -504,15 +529,11 @@ async function loadScars() {
   )).map((s) => {
     const esReal = s.perimeter === 'real';
     const usarBlob = s.perimeter === 'approx' && s.geometry.type === 'Polygon' && ringIsSquare(s.geometry.coordinates[0]);
-    return {
-      type: 'Feature',
-      // Solo el cuadrado orientativo declarado «approx» se dibuja como mancha; los perímetros reales pasan intactos.
-      geometry: usarBlob ? blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)) : s.geometry,
-      properties: {
-        kind: 'historica', name: s.name, year: s.year, season: s.season,
-        burned_ha: s.burned_ha, region: s.region, perimeter: esReal ? 'real' : 'approx',
-      },
-    };
+    // Solo el cuadrado orientativo declarado «approx» se dibuja como mancha; los perímetros reales pasan intactos.
+    return feat(usarBlob ? blobFromRing(s.geometry.coordinates[0], seedFrom(s.id ?? s.name)) : s.geometry, {
+      kind: 'historica', name: s.name, year: s.year, season: s.season,
+      burned_ha: s.burned_ha, region: s.region, perimeter: esReal ? 'real' : 'approx',
+    });
   });
   const features = [...extra, ...(season?.features || [])];
   if (features.length) setData('scars', { type: 'FeatureCollection', features });
@@ -549,17 +570,22 @@ async function loadWind(input, ticket) {
     syncVientoControls();
     legend();
   } catch {
-    if (ticket !== undefined && capaTicket.viento !== ticket) return;
-    layers.viento = false;
-    if (input) input.checked = false;
+    if (!apagarCapa('viento', input, ticket)) return;
     vientoEdadTxt = '';
     vientoInfo = null;
     vientoVieja = false;
-    applyLayers();
     syncVientoControls();
     toast('La grilla de viento todavía no está lista: el ciclo la calcula cada 6 horas.', 'error');
     legend();
   }
+}
+
+// Apaga el canvas de viento y limpia su estado: lo llaman setCapa, los perfiles y el desmontaje.
+function apagarViento() {
+  vientoEdadTxt = '';
+  vientoInfo = null;
+  vientoVieja = false;
+  import('../viento.js').then((m) => m.apagar());
 }
 
 /** Catastro SNASPE (CONAF). El JSON versionado trae `items`, no un FeatureCollection. */
@@ -571,57 +597,54 @@ async function loadSnaspe(input, ticket) {
     snaspeSourceUrl = body?.source?.url || '';
     setData('snaspe', {
       type: 'FeatureCollection',
-      features: items.filter((item) => item?.geometry).map((item) => ({
-        type: 'Feature',
-        geometry: item.geometry,
-        properties: { name: item.name || '', category: item.category || '', region: item.region || '' },
-      })),
+      features: items.filter((item) => item?.geometry).map((item) => feat(item.geometry, { name: item.name || '', category: item.category || '', region: item.region || '' })),
     });
   } catch {
-    if (ticket !== undefined && capaTicket.snaspe !== ticket) return;
-    layers.snaspe = false;
-    if (input) input.checked = false;
-    applyLayers();
+    if (!apagarCapa('snaspe', input, ticket)) return;
     toast('No se pudieron cargar las áreas protegidas (SNASPE).', 'error');
   }
 }
 
-/** Infraestructura crítica (MAPA-181): archivo estático versiónado (OSM ODbL + DEIS MINSAL
- *  CC0) que se descarga una sola vez; alimenta puntos y líneas, visibles desde zoom 10. */
+/** Infraestructura crítica (MAPA-181 / REND-02): teselas de 1° del encuadre visible (OSM ODbL +
+ *  DEIS MINSAL CC0), visibles desde zoom 10. El índice también se pide bajo ese zoom (es pequeño);
+ *  las teselas, no. Cada llamada espera también las que ya están en vuelo y mantiene el contrato
+ *  del archivo único: si falta algo del encuadre no se publica nada y la capa se revierte. */
 async function loadInfra(input, ticket) {
-  if (infraCargada) return;
-  try {
-    const res = await fetch('/web/data/infraestructura/chile.json');
-    const body = await res.json().catch(() => null);
-    if (!res.ok || !Array.isArray(body?.rows) || !Array.isArray(body?.lines)) throw new Error('sin infraestructura');
-    setData('infra-puntos', {
-      type: 'FeatureCollection',
-      features: body.rows.map(([lon, lat, k, n, s, d]) => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [lon, lat] },
-        properties: { k, n, s, d },
-      })),
-    });
-    setData('infra-lineas', {
-      type: 'FeatureCollection',
-      features: body.lines.map((l) => ({
-        type: 'Feature',
-        geometry: { type: 'LineString', coordinates: l.coordinates },
-        properties: { kv: l.kv, n: l.n || '', s: l.s || 'osm' },
-      })),
-    });
-    infraCargada = true;
-  } catch {
-    if (ticket !== undefined && capaTicket.infra !== ticket) return;
-    layers.infra = false;
-    if (input) input.checked = false;
-    applyLayers();
-    syncCapaInputs();
-    legend();
-    syncBasemapCredit();
-    updateCapasUrl();
-    toast('No se pudo cargar la infraestructura crítica.', 'error');
+  const seq = ++infraSeq;
+  const idx = await pedirInfra('indice');
+  if (infraSeq !== seq) return; // un encuadre más nuevo manda
+  if (!idx) return fallaInfra(input, ticket);
+  const map = getMap();
+  if (!map || !layers.infra || map.getZoom() < INFRA_MINZOOM) return;
+  // getBounds cubre el encuadre real también con giro e inclinación; cruzado el antimeridiano no hay infra.
+  const b = map.getBounds();
+  const esperas = [];
+  for (let lat = Math.floor(b.getSouth()); lat <= Math.floor(b.getNorth()); lat++) {
+    for (let lon = Math.floor(b.getWest()); lon <= Math.floor(b.getEast()); lon++) {
+      if (idx[`${lat}_${lon}`]) esperas.push(pedirInfra(`t/${lat}_${lon}`));
+    }
   }
+  if (!esperas.length) return publicaInfra();
+  const oks = await Promise.all(esperas);
+  if (infraSeq !== seq) return;
+  // Como con el archivo único: si falta una tesela del encuadre, no se publica el lote incompleto
+  // y la capa se revierte. Lo fallado se suelta, así que volver a prenderla lo reintenta.
+  if (!oks.every(Boolean)) return fallaInfra(input, ticket);
+  publicaInfra();
+}
+
+// Al mover el mapa con la capa prendida se completan las teselas del nuevo encuadre (REND-02).
+const onInfraMove = () => { if (mounted && layers.infra) loadInfra(null, capaTicket.infra); };
+
+/** El índice o una tesela que falta revierte la capa con el mismo aviso que el archivo único:
+ *  nunca se deja un encuadre incompleto pasando por completo. */
+function fallaInfra(input, ticket) {
+  if (!mounted || !layers.infra || !apagarCapa('infra', input, ticket)) return;
+  syncCapaInputs();
+  legend();
+  syncBasemapCredit();
+  updateCapasUrl();
+  toast('No se pudo cargar la infraestructura crítica.', 'error');
 }
 
 /** Humo GOES-19 (capa «aire», DET-16/DET-48): máscara ADPF + espesor óptico AODF; si falla, el switch se apaga. */
@@ -636,14 +659,10 @@ async function loadSmoke(input, ticket) {
     };
     setData('smoke', body);
   } catch (err) {
-    if (ticket !== undefined && capaTicket.aire !== ticket) return;
-    layers.aire = false;
+    if (!apagarCapa('aire', input, ticket)) return;
     smokeMeta = null;
-    if (input) input.checked = false;
     setData('smoke', EMPTY_FC);
-    applyLayers();
-    toast(err instanceof TypeError ? 'Sin conexión con el servidor: no se pudo cargar el humo.'
-      : (err?.message || 'El humo de GOES no está disponible ahora.'), 'error');
+    toast(msjRed(err, 'no se pudo cargar el humo') || 'El humo de GOES no está disponible ahora.', 'error');
   }
 }
 
@@ -666,6 +685,19 @@ function updateCapasUrl() {
 // Una carga diferida solo revierte su capa si sigue siendo la última pedida: un fracaso
 // viejo no apaga una capa que el usuario ya volvió a encender. El contador por capa lo lleva setCapa.
 const capaTicket = {};
+
+/** Revierte una capa cuya carga diferida falló, si ninguna conmutación más nueva la reclamó
+ *  (un fracaso viejo no apaga una capa que el usuario volvió a encender). */
+function apagarCapa(key, input, ticket) {
+  if (ticket !== undefined && capaTicket[key] !== ticket) return false;
+  layers[key] = false;
+  if (input) input.checked = false;
+  applyLayers();
+  return true;
+}
+
+// Aviso de red caída compartido por las capas diferidas (los textos no cambian).
+const msjRed = (err, que) => (err instanceof TypeError ? `Sin conexión con el servidor: ${que}.` : err?.message);
 
 // MAPA-180 / UX-82: las capas satelitales NASA GIBS comparten el día de la imagen («Hoy / Ayer», UTC)
 // y la opacidad contextual de capas raster (GIBS y relieve) la gobierna un único deslizador.
@@ -713,10 +745,8 @@ function apagarWmsVisual() {
 
 /** Opacidad única de capas raster y día GIBS contextual, sin repintar todo el panel. */
 function syncGibsControls() {
-  const hayRaster = RASTER_CTX_KEYS.some((k) => layers[k]);
-  const hayGibs = GIBS_KEYS.some((k) => layers[k]);
   const rasterWrap = layersEl?.querySelector('#layers-raster-ctl');
-  if (rasterWrap) rasterWrap.hidden = !hayRaster;
+  if (rasterWrap) rasterWrap.hidden = !RASTER_CTX_KEYS.some((k) => layers[k]);
   const slider = layersEl?.querySelector('#layers-raster-opacity');
   const pct = Math.round(getRasterOpacity() * 100);
   if (slider) {
@@ -724,9 +754,9 @@ function syncGibsControls() {
     slider.setAttribute('aria-valuetext', `${pct} %`);
   }
   const dayWrap = layersEl?.querySelector('#layers-gibs-day');
-  if (dayWrap) dayWrap.hidden = !hayGibs;
+  if (dayWrap) dayWrap.hidden = !GIBS_KEYS.some((k) => layers[k]);
   layersEl?.querySelectorAll('[data-gibs-fecha]').forEach((b) => {
-    b.setAttribute('aria-pressed', String(b.dataset.gibsFecha === gibsDia));
+    setPressed(b, b.dataset.gibsFecha === gibsDia);
   });
 }
 
@@ -734,31 +764,28 @@ function syncGibsControls() {
 function syncVientoControls() {
   const wrap = layersEl?.querySelector('#layers-viento-ctl');
   const pasos = vientoInfo?.pasos;
-  const mostrar = Boolean(layers.viento) && !vientoVieja && (!pasos || pasos.length > 1);
-  if (wrap) wrap.hidden = !mostrar;
-  const activo = vientoInfo?.pasoHora ?? 0;
+  if (wrap) wrap.hidden = !(layers.viento && !vientoVieja && (!pasos || pasos.length > 1));
   layersEl?.querySelectorAll('[data-viento-paso]').forEach((b) => {
     const h = Number(b.dataset.vientoPaso);
     const at = vientoInfo?.pasosAt?.[String(h)] || null;
     const visible = etiquetaBotonViento(h, at);
     b.textContent = visible;
     b.setAttribute('aria-label', ariaBotonViento(h, at, visible));
-    b.setAttribute('aria-pressed', String(h === activo));
+    setPressed(b, h === (vientoInfo?.pasoHora ?? 0));
     b.hidden = Boolean(pasos?.length) && !pasos.includes(h);
   });
 }
 
-function syncLoadingSummary() {
+function syncCargando() {
   setMapLoadingLayers([...cargando].map((k) => CAPA_LABEL[k] || k));
 }
 
+// El perfil activo es el cuyo estado calza capa por capa; «basico» es el perfil de salida.
 function presetActivo() {
-  for (const p of PRESETS) {
-    const esperado = aplicarPreset(layers, p.id);
-    if (CAPAS.every((c) => Boolean(layers[c.key]) === Boolean(esperado[c.key]))) return p.id;
+  for (const id of [...PRESETS.map((p) => p.id), 'basico']) {
+    const esperado = aplicarPreset(layers, id);
+    if (CAPAS.every((c) => Boolean(layers[c.key]) === Boolean(esperado[c.key]))) return id;
   }
-  const basico = aplicarPreset(layers, 'basico');
-  if (CAPAS.every((c) => Boolean(layers[c.key]) === Boolean(basico[c.key]))) return 'basico';
   return null;
 }
 
@@ -768,7 +795,7 @@ function syncCapaInputs() {
   if (ninguna) ninguna.checked = !COROPLETAS.some((k) => layers[k]);
   const activo = presetActivo();
   layersEl?.querySelectorAll('[data-preset]').forEach((b) => {
-    b.setAttribute('aria-pressed', String(b.dataset.preset === activo));
+    setPressed(b, b.dataset.preset === activo);
   });
   const count = layersEl?.querySelector('.layers-count');
   if (count) count.textContent = `${CAPAS.filter((c) => layers[c.key]).length} de ${CAPAS.length}`;
@@ -778,8 +805,11 @@ function syncCapaInputs() {
   syncVientoControls();
 }
 
+// Aviso en vivo del control de capas: vive dentro del <summary>, visible con el <details> cerrado.
+const capasLive = () => layersEl?.querySelector('#capas-live');
+
 function announceCapa(key) {
-  const live = layersEl?.querySelector('#capas-live');
+  const live = capasLive();
   const capa = CAPAS.find((c) => c.key === key);
   if (live && capa) live.textContent = `«${capa.label}» ${layers[key] ? 'activada' : 'desactivada'}`;
 }
@@ -791,17 +821,16 @@ function clearCoropletas() {
   syncCapaInputs();
   updateCapasUrl();
   legend();
-  const live = layersEl?.querySelector('#capas-live');
+  const live = capasLive();
   if (live) live.textContent = 'Capa territorial desactivada';
 }
 
 /** Aplica uno de los perfiles rápidos (Emergencia, Prevención, Satélite hoy o Volver a lo básico). */
 async function aplicarPresetMapa(presetId) {
   const prev = { ...layers };
-  const next = aplicarPreset(layers, presetId);
-  Object.assign(layers, next);
+  Object.assign(layers, aplicarPreset(layers, presetId));
   if (prev.aire && !layers.aire) { smokeMeta = null; setData('smoke', EMPTY_FC); }
-  if (prev.viento && !layers.viento) { vientoEdadTxt = ''; vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); }
+  if (prev.viento && !layers.viento) apagarViento();
   if (prev.lightning && !layers.lightning) setData('lightning', EMPTY_FC);
   applyLayers();
   syncCapaInputs();
@@ -809,19 +838,16 @@ async function aplicarPresetMapa(presetId) {
   legend();
   syncBasemapCredit();
   const loaders = [];
-  if (layers.aire && !prev.aire) loaders.push(setCapa('aire', true, layersEl?.querySelector('[data-capa="aire"]')));
-  if (layers.viento && !prev.viento) loaders.push(setCapa('viento', true, layersEl?.querySelector('[data-capa="viento"]')));
-  if (layers.lightning && !prev.lightning) loaders.push(setCapa('lightning', true, layersEl?.querySelector('[data-capa="lightning"]')));
-  if (layers.senapred && !prev.senapred) loaders.push(setCapa('senapred', true, layersEl?.querySelector('[data-capa="senapred"]')));
-  if (layers.snaspe && !prev.snaspe) loaders.push(setCapa('snaspe', true, layersEl?.querySelector('[data-capa="snaspe"]')));
-  if (layers.infra && !prev.infra) loaders.push(setCapa('infra', true, layersEl?.querySelector('[data-capa="infra"]')));
+  for (const k of ['aire', 'viento', 'lightning', 'senapred', 'snaspe', 'infra']) {
+    if (layers[k] && !prev[k]) loaders.push(setCapa(k, true, layersEl?.querySelector(`[data-capa="${k}"]`)));
+  }
   if ((layers.risk || layers.rain) && !(prev.risk || prev.rain)) loaders.push(loadRisk());
   if (layers.hulls && !prev.hulls) loaders.push(loadIncidents());
   if (layers.scars && !prev.scars) loaders.push(loadScars());
   if (loaders.length) await Promise.allSettled(loaders);
   syncCapaInputs();
   legend();
-  const live = layersEl?.querySelector('#capas-live');
+  const live = capasLive();
   const titulo = presetId === 'basico' ? 'Volver a lo básico' : (PRESETS.find((p) => p.id === presetId)?.label || presetId);
   if (live) live.textContent = `Perfil «${titulo}» aplicado`;
 }
@@ -835,7 +861,7 @@ async function setCapa(key, checked, input) {
   // siguiente Tab se salta la capa (MAPA-141). La carga doble se evita con `cargando`.
   const lazy = { aire: loadSmoke, lightning: loadLightning, viento: loadWind, senapred: loadSenapred, snaspe: loadSnaspe, infra: loadInfra }[key];
   if (key === 'aire' && !checked) { smokeMeta = null; setData('smoke', EMPTY_FC); }
-  if (key === 'viento' && !checked) { vientoEdadTxt = ''; vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); syncVientoControls(); legend(); }
+  if (key === 'viento' && !checked) { apagarViento(); syncVientoControls(); legend(); }
   if (key === 'lightning' && !checked) setData('lightning', EMPTY_FC);
   // Resumen y leyenda responden al instante: la capa queda prendida aunque su dato demore; si la
   // carga falla, el propio loader la revierte y applyLayers la suelta.
@@ -847,15 +873,14 @@ async function setCapa(key, checked, input) {
     else {
       do {
         cargando.add(key);
-        syncLoadingSummary();
-        try { await lazy(input, ticket); } finally { cargando.delete(key); syncLoadingSummary(); }
+        syncCargando();
+        try { await lazy(input, ticket); } finally { cargando.delete(key); syncCargando(); }
         applyLayers();
       } while (recargar.delete(key) && layers[key]);
     }
   }
-  if (['risk', 'rain'].includes(key) && checked) await loadRisk();
-  if (key === 'hulls' && checked) await loadIncidents();
-  if (key === 'scars' && checked) await loadScars();
+  const trae = { risk: loadRisk, rain: loadRisk, hulls: loadIncidents, scars: loadScars };
+  if (checked && trae[key]) await trae[key]();
   syncCapaInputs();
   // Escribe la URL solo si `capas` sigue como estaba al tocar: si cambió (otro toque ya la
   // escribió o la vista aún consume un ?capas=…), este toque viejo no la pisa.
@@ -865,54 +890,50 @@ async function setCapa(key, checked, input) {
   if (key === 'terreno3d' && checked && navigator.connection?.saveData) {
     toast('Relieve 3D activado (descarga teselas de elevación).');
   }
-  if (key === 'wui' || key === 'relieve' || key === 'terreno3d' || key === 'worldcover' || key === 'gwis_ranking' || key === 'gwis_ba' || key === 'infra' || COROPLETAS.includes(key)) {
+  // Estas capas cambian el deslizador/día de imagen y el crédito (GIBS: NASA EOSDIS, también en la barra móvil).
+  if (key.startsWith('gibs_') || ['wui', 'relieve', 'terreno3d', 'worldcover', 'gwis_ranking', 'gwis_ba', 'infra', ...COROPLETAS].includes(key)) {
     syncGibsControls();
     syncBasemapCredit();
   }
-  // Las capas GIBS también cambian el crédito (NASA EOSDIS), también en la barra móvil.
-  if (key.startsWith('gibs_')) { syncGibsControls(); syncBasemapCredit(); }
 }
 
 // Índice liviano de comunas para el buscador (MAPA-21): se usa el de app.js o se pide una
 // vez al abrirlo (misma URL, sin endpoint nuevo).
-let comunasPromise = null;
+let comunasP = null;
 function loadComunasIndex() {
   const cached = store.get('comunasIndex');
   if (cached?.length) return Promise.resolve(cached);
-  comunasPromise ??= fetch('/web/data/comunas-index.json')
+  comunasP ??= fetch('/web/data/comunas-index.json')
     .then((res) => res.json())
     .then((index) => {
       const ordenado = index.sort((a, b) => a.name.localeCompare(b.name, 'es'));
       store.set('comunasIndex', ordenado);
       return ordenado;
     })
-    .catch(() => { comunasPromise = null; return []; });
-  return comunasPromise;
+    .catch(() => { comunasP = null; return []; });
+  return comunasP;
 }
 
 // Localidades (MAPA-167): índice diferido, se pide al usar el buscador.
-let localidadesPromise = null;
+let localidadesP = null;
 function loadLocalidades() {
-  localidadesPromise ??= fetch('/web/data/localidades.json')
+  localidadesP ??= fetch('/web/data/localidades.json')
     .then((res) => res.json())
     .then((filas) => filas.map(([name, comuna, tipo, lat, lon]) => ({ name, comuna, tipo, lat, lon })))
-    .catch(() => { localidadesPromise = null; return []; });
-  return localidadesPromise;
+    .catch(() => { localidadesP = null; return []; });
+  return localidadesP;
 }
 
 /** Zoom centrado en la cabecera comunal: compacto en comunas urbanas y nunca tan abierto
  *  que la ciudad desaparezca en comunas cordilleranas o del norte grande. */
 function zoomParaBbox([w, s, e, n]) {
   const cont = document.getElementById('map');
-  const ancho = cont?.clientWidth || 1024;
-  const alto = cont?.clientHeight || 640;
-  const rad = Math.PI / 180;
-  const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * rad) / 2));
+  const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
   const fx = Math.abs(e - w) / 360;
   const fy = Math.abs(mercY(n) - mercY(s)) / (2 * Math.PI);
   if (!fx && !fy) return 11;
-  const zx = fx ? Math.log2((0.7 * ancho) / (512 * fx)) : Infinity;
-  const zy = fy ? Math.log2((0.7 * alto) / (512 * fy)) : Infinity;
+  const zx = fx ? Math.log2((0.7 * (cont?.clientWidth || 1024)) / (512 * fx)) : Infinity;
+  const zy = fy ? Math.log2((0.7 * (cont?.clientHeight || 640)) / (512 * fy)) : Infinity;
   return Math.max(10.5, Math.min(12.5, Math.round(Math.min(zx, zy) * 2) / 2));
 }
 
@@ -963,7 +984,7 @@ function bindBuscarComuna(root, onElegir) {
     // sube a «full» y el campo queda a la vista. Solo con dedo: con teclado físico no hay teclado
     // virtual y subirla repliega la fila de controles que el Tab aún recorre.
     if (matchMedia('(max-width: 899px) and (pointer: coarse)').matches) {
-      document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' }));
+      hoja('full');
       search.scrollIntoView({ block: 'nearest' });
     }
     // Escape devuelve el foco al campo con la consulta conservada: repintar aquí
@@ -1066,21 +1087,24 @@ $('#map-legend')?.addEventListener('click', (e) => {
   if (b) b.setAttribute('aria-expanded', String(!$('#map-legend').classList.toggle('legend-closed')));
 });
 
+// Sube o baja la hoja del mapa: «peek», «half», «full» o el estado guardado que traiga cada llamada.
+const hoja = (detail) => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail }));
+
 // En pantallas bajas (p. ej. 320×568), abrir Capas o Filtros baja temporalmente
 // la hoja a «peek» para dejar espacio, y la restaura al cerrar.
-let hojaAntesControl = null;
+let hojaPrev = null;
 function ajustarHojaControl(abierto) {
   if (window.innerWidth >= 900 || window.innerHeight > 640) return;
   if (abierto) {
     const actual = document.documentElement.dataset.sheet;
     if (actual && actual !== 'peek') {
-      hojaAntesControl ??= actual;
-      document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' }));
+      hojaPrev ??= actual;
+      hoja('peek');
     }
-  } else if (hojaAntesControl && !layersEl?.open && !filtrosEl?.open) {
-    const prev = hojaAntesControl;
-    hojaAntesControl = null;
-    document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: prev }));
+  } else if (hojaPrev && !layersEl?.open && !filtrosEl?.open) {
+    const prev = hojaPrev;
+    hojaPrev = null;
+    hoja(prev);
   }
 }
 
@@ -1095,12 +1119,11 @@ function creditoFondoHtml() {
     credito = raw(BASEMAPS[fondo].attribution.replace(/\u2013|\u2014/g, '·'));
   }
   if (layers.relieve || layers.terreno3d) {
-    const usaAws = getTerrenoDemFuente() === 'aws' || isDemFallbackAws();
-    credito = usaAws
+    credito = getTerrenoDemFuente() === 'aws' || isDemFallbackAws()
       ? html`${credito} · Relieve: © <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a> · USGS / Mapzen`
       : html`${credito} · Relieve: © <a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">Mapterhorn</a> · Copernicus DEM GLO-30`;
   }
-  if (layers.gibs_goes || layers.gibs_viirs || layers.gibs_aod) {
+  if (GIBS_KEYS.some((k) => layers[k])) {
     credito = html`${credito} · Satélite: <a href="https://gibs.earthdata.nasa.gov" target="_blank" rel="noopener">NASA GIBS</a> (EOSDIS)`;
   }
   if (layers.gwis_ranking || layers.gwis_ba) {
@@ -1124,17 +1147,17 @@ function lineaCreditoFondo() {
 
 function syncBasemapCredit() {
   const texto = String(lineaCreditoFondo());
-  const capa = document.getElementById('layers-basemap-credit');
-  const panel = document.getElementById('panel-basemap-credit');
-  if (capa) capa.innerHTML = texto;
-  if (panel) panel.innerHTML = texto;
+  for (const id of ['layers-basemap-credit', 'panel-basemap-credit']) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = texto;
+  }
 }
 
-const cargarOfflineMod = () => import('../mapa-offline.js');
+const modOffline = () => import('../mapa-offline.js');
 
 function syncBasemapButtons() {
   layersEl?.querySelectorAll('[data-basemap]').forEach((x) => {
-    x.setAttribute('aria-pressed', String(x.dataset.basemap === basemap()));
+    setPressed(x, x.dataset.basemap === basemap());
   });
   syncBasemapCredit();
 }
@@ -1151,12 +1174,12 @@ async function syncOfflineUi({ autoCambiar = false } = {}) {
   }
   let guardado = false;
   try {
-    const { tieneMapaGuardado } = await cargarOfflineMod();
+    const { tieneMapaGuardado } = await modOffline();
     guardado = await tieneMapaGuardado();
-  } catch { guardado = false; }
+  } catch { /* sin caché: queda false */ }
   if (!mounted || !store.get('basemapOffline')) return;
-  if (autoCambiar && basemap() !== 'mapa' && navigator.onLine === false && guardado && !autoCambioMapaOfflineHecho) {
-    autoCambioMapaOfflineHecho = true;
+  if (autoCambiar && basemap() !== 'mapa' && navigator.onLine === false && guardado && !autoOfflineHecho) {
+    autoOfflineHecho = true;
     setBasemap('mapa');
     syncBasemapButtons();
     syncCapaInputs();
@@ -1172,13 +1195,13 @@ async function syncOfflineUi({ autoCambiar = false } = {}) {
   }
 }
 
-async function actualizarEstadoZonaOffline() {
-  if (!mounted || guardandoZonaOffline) return;
+async function estadoZonaOffline() {
+  if (!mounted || guardandoZona) return;
   const estado = layersEl?.querySelector('#estado-zona-offline');
   if (!estado) return;
   try {
-    const { metaMapa, tieneMapaGuardado } = await cargarOfflineMod();
-    if (!mounted || guardandoZonaOffline) return;
+    const { metaMapa, tieneMapaGuardado } = await modOffline();
+    if (!mounted || guardandoZona) return;
     const zona = metaMapa()['zona-visible'];
     if (zona) {
       const mb = `${fmtNum((zona.bytes || 0) / 1048576, 1)} MB`;
@@ -1186,7 +1209,7 @@ async function actualizarEstadoZonaOffline() {
         ? `Zona guardada ${ago(zona.at)} · ${mb}`
         : `Zona parcial (${zona.recursos} de ${zona.total}) · ${mb}`;
     } else if (await tieneMapaGuardado()) {
-      if (!mounted || guardandoZonaOffline) return;
+      if (!mounted || guardandoZona) return;
       estado.textContent = 'Ya tienes un mapa guardado para ver sin señal.';
     } else {
       estado.textContent = '';
@@ -1194,8 +1217,8 @@ async function actualizarEstadoZonaOffline() {
   } catch { /* sin acceso a caché: deja el estado vacío */ }
 }
 
-async function guardarZonaVisibleOffline() {
-  if (guardandoZonaOffline || !mounted) return;
+async function guardarZonaOffline() {
+  if (guardandoZona || !mounted) return;
   const btn = layersEl?.querySelector('#btn-guardar-zona-offline');
   const estado = layersEl?.querySelector('#estado-zona-offline');
   const bbox = visibleBbox();
@@ -1203,17 +1226,17 @@ async function guardarZonaVisibleOffline() {
     if (estado) estado.textContent = 'Espera a que cargue el mapa para guardar esta zona.';
     return;
   }
-  guardandoZonaOffline = true;
-  descargaZonaCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  guardandoZona = true;
+  descargaCtrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
   btn?.setAttribute('aria-disabled', 'true');
   btn?.setAttribute('aria-busy', 'true');
   if (estado) estado.textContent = 'Preparando descarga de esta zona…';
   let ultimoTramo = -1;
   let ultimoPintado = 0;
   try {
-    const { descargarZonaVisible } = await cargarOfflineMod();
+    const { descargarZonaVisible } = await modOffline();
     const r = await descargarZonaVisible(bbox, {
-      signal: descargaZonaCtrl?.signal || null,
+      signal: descargaCtrl?.signal || null,
       onProgreso: ({ hechas, total }) => {
         if (!mounted || !total) return;
         const tramo = Math.floor((hechas * 10) / total);
@@ -1221,34 +1244,28 @@ async function guardarZonaVisibleOffline() {
         if (tramo === ultimoTramo && ahora - ultimoPintado < 1000 && hechas < total) return;
         ultimoTramo = tramo;
         ultimoPintado = ahora;
-        const st = layersEl?.querySelector('#estado-zona-offline');
-        if (st) st.textContent = `Guardando zona: ${hechas} de ${total}…`;
+        if (estado) estado.textContent = `Guardando zona: ${hechas} de ${total}…`;
       },
     });
     if (!mounted || r.motivo === 'cancelado') return;
     const mb = `${fmtNum((r.bytes || 0) / 1048576, 1)} MB`;
-    const st = layersEl?.querySelector('#estado-zona-offline');
     if (r.completo) {
-      if (st) st.textContent = `Zona guardada para ver sin señal (${mb}).`;
+      if (estado) estado.textContent = `Zona guardada para ver sin señal (${mb}).`;
       toast(`Zona guardada para ver sin señal (${mb}).`);
     } else if (r.motivo === 'tope') {
-      if (st) st.textContent = 'La zona es demasiado amplia: acerca un poco el mapa y vuelve a guardar.';
+      if (estado) estado.textContent = 'La zona es demasiado amplia: acerca un poco el mapa y vuelve a guardar.';
       toast('La zona es muy amplia: acerca un poco el mapa para guardarla completa.');
     } else {
-      if (st) st.textContent = `Descarga interrumpida (${r.recursos} de ${r.total}, ${mb}).`;
+      if (estado) estado.textContent = `Descarga interrumpida (${r.recursos} de ${r.total}, ${mb}).`;
     }
     syncOfflineUi();
   } catch (err) {
-    if (mounted) {
-      const st = layersEl?.querySelector('#estado-zona-offline');
-      if (st) st.innerHTML = String(dual('No se pudo guardar esta zona. Revisa tu conexión e inténtalo de nuevo.', err?.message || 'Error al descargar teselas sin conexión.'));
-    }
+    if (mounted && estado) estado.innerHTML = String(dual('No se pudo guardar esta zona. Revisa tu conexión e inténtalo de nuevo.', err?.message || 'Error al descargar teselas sin conexión.'));
   } finally {
-    guardandoZonaOffline = false;
-    descargaZonaCtrl = null;
-    const b = layersEl?.querySelector('#btn-guardar-zona-offline');
-    b?.removeAttribute('aria-disabled');
-    b?.removeAttribute('aria-busy');
+    guardandoZona = false;
+    descargaCtrl = null;
+    btn?.removeAttribute('aria-disabled');
+    btn?.removeAttribute('aria-busy');
   }
 }
 
@@ -1275,7 +1292,7 @@ function mountLayersControl() {
     $('#legend-chip')?.setAttribute('aria-expanded', 'false');
     const f = $('#map-filters'); if (f) f.open = false;
     syncOfflineUi();
-    actualizarEstadoZonaOffline();
+    estadoZonaOffline();
   });
   // El anuncio va dentro del <summary>: el resto del <details> cerrado no se renderiza.
   layersEl.innerHTML = String(html`<summary><span>Capas</span><span class="layers-count" aria-hidden="true"></span><span class="sr-only" id="capas-live" role="status"></span></summary>
@@ -1333,17 +1350,17 @@ function mountLayersControl() {
   // display:contents y «Capas» sigue siendo la tarjeta flotante de siempre.
   const dock = $('#map-ctl') || wrap;
   dock.insertBefore(layersEl, dock.querySelector('#legend-chip'));
-  layersEl.querySelectorAll('[data-preset]').forEach((b) => b.addEventListener('click', () => aplicarPresetMapa(b.dataset.preset)));
-  layersEl.querySelector('[data-coropleta="ninguna"]')?.addEventListener('change', (e) => { if (e.target.checked) clearCoropletas(); });
-  layersEl.querySelectorAll('[data-capa]').forEach((input) => input.addEventListener('change', () => setCapa(input.dataset.capa, input.checked, input)));
-  layersEl.querySelectorAll('[data-gibs-fecha]').forEach((b) => b.addEventListener('click', () => {
+  on(layersEl, '[data-preset]', 'click', (b) => aplicarPresetMapa(b.dataset.preset));
+  on1(layersEl, '[data-coropleta="ninguna"]', 'change', (e) => { if (e.target.checked) clearCoropletas(); });
+  on(layersEl, '[data-capa]', 'change', (input) => setCapa(input.dataset.capa, input.checked, input));
+  on(layersEl, '[data-gibs-fecha]', 'click', (b) => {
     gibsDia = b.dataset.gibsFecha;
     setGibsDia(gibsDia);
     applyGibs();
     legend();
     syncGibsControls();
-  }));
-  layersEl.querySelectorAll('[data-viento-paso]').forEach((b) => b.addEventListener('click', () => {
+  });
+  on(layersEl, '[data-viento-paso]', 'click', (b) => {
     const paso = Number(b.dataset.vientoPaso);
     import('../viento.js').then((m) => {
       vientoMod = m;
@@ -1351,21 +1368,21 @@ function mountLayersControl() {
       vientoInfo = m.infoVientoActivo();
       syncVientoControls();
       legend();
-      const live = layersEl?.querySelector('#capas-live');
+      const live = capasLive();
       if (live) live.textContent = `Viento: ${etiquetaPaso(vientoInfo.pasoHora, vientoInfo.at)}`;
     });
-  }));
-  layersEl.querySelector('#layers-raster-opacity')?.addEventListener('input', (e) => {
+  });
+  on1(layersEl, '#layers-raster-opacity', 'input', (e) => {
     const pct = Number(e.target.value);
     e.target.setAttribute('aria-valuetext', `${pct} %`);
     setRasterOpacity(pct / 100);
   });
-  layersEl.querySelectorAll('[data-basemap]').forEach((b) => b.addEventListener('click', () => {
+  on(layersEl, '[data-basemap]', 'click', (b) => {
     setBasemap(b.dataset.basemap);
     syncBasemapButtons();
     syncCapaInputs();
-  }));
-  layersEl.querySelector('#btn-usar-mapa-guardado')?.addEventListener('click', () => {
+  });
+  on1(layersEl, '#btn-usar-mapa-guardado', 'click', () => {
     layersEl?.querySelector('[data-basemap="mapa"]')?.focus();
     setBasemap('mapa');
     syncBasemapButtons();
@@ -1373,7 +1390,7 @@ function mountLayersControl() {
     syncOfflineUi();
     toast('Mostrando el mapa que guardaste.');
   });
-  layersEl.querySelector('#btn-guardar-zona-offline')?.addEventListener('click', guardarZonaVisibleOffline);
+  on1(layersEl, '#btn-guardar-zona-offline', 'click', guardarZonaOffline);
 }
 
 // Filtro por distancia (VIS-03): radio = { km, lat, lon, origen }; la posición solo se pide al tocar un chip.
@@ -1410,6 +1427,8 @@ const textoDesde = () => {
   if (permEstado === 'granted' || (!lugar && geoDisponible())) return `desde: ${TU_UBI}`;
   return lugar ? `desde: ${lugar.name || TU_LUGAR}` : null;
 };
+// Chips de ventana de horas compartidos por el panel y la píldora «Filtros».
+const chipsHorasHtml = (h) => html`${RANGES.map(([k, label, short]) => html`<button type="button" class="chip" data-hours="${k}" aria-pressed="${k === h}">${dual(label, short)}</button>`)}`;
 const presionado = (km) => (radio ? radio.km === km : km === 0);
 const chipsDistanciaHtml = () => html`${DISTANCIAS.map(([km, label]) => html`<button type="button" class="chip" data-dist="${km}" aria-pressed="${presionado(km)}" ${km && !refPosible() ? 'disabled' : ''}>${label}</button>`)}`;
 
@@ -1418,11 +1437,11 @@ function pintarDistancia() {
   const desde = textoDesde() || SIN_REF;
   if (distEl?.childElementCount === 0) {
     distEl.innerHTML = String(chipsDistanciaHtml());
-    distEl.querySelectorAll('[data-dist]').forEach((b) => b.addEventListener('click', () => elegirDistancia(Number(b.dataset.dist))));
+    on(distEl, '[data-dist]', 'click', (b) => elegirDistancia(Number(b.dataset.dist)));
   }
   document.querySelectorAll('[data-dist], .dist-desde').forEach((b) => {
     if (!b.dataset.dist) { b.textContent = desde; return; }
-    b.setAttribute('aria-pressed', String(presionado(Number(b.dataset.dist))));
+    setPressed(b, presionado(Number(b.dataset.dist)));
     b.toggleAttribute('disabled', Boolean(Number(b.dataset.dist)) && !refPosible());
   });
 }
@@ -1453,7 +1472,7 @@ function pintarIncidentes() {
   setData('incident-hulls', {
     type: 'FeatureCollection',
     features: visibles.filter((i) => i.hull)
-      .map((i) => ({ type: 'Feature', geometry: { type: 'Polygon', coordinates: [i.hull] }, properties: { id: i.id, status: i.status } })),
+      .map((i) => feat({ type: 'Polygon', coordinates: [i.hull] }, { id: i.id, status: i.status })),
   });
   setData('incident-rings', pointsGeoJSON(
     visibles.filter((i) => RING_STATUS.has(i.status)),
@@ -1464,7 +1483,7 @@ function pintarIncidentes() {
 // que quedaba falso tras cada setData y el círculo nunca se dibujaba (11-nov).
 function pintarCirculoRadio() {
   setData('filtro-radio', radio
-    ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: circlePolygon(radio.lon, radio.lat, radio.km) }] }
+    ? { type: 'FeatureCollection', features: [feat(circlePolygon(radio.lon, radio.lat, radio.km), {})] }
     : EMPTY_FC);
 }
 
@@ -1484,7 +1503,7 @@ function encuadrarRadio() {
 
 // map.js escribe #map-summary al quedar el lienzo en reposo; aquí se le suma el radio.
 let resumenSufijo = '';
-function pintarResumenRadio() {
+function pintarResumen() {
   const el = document.getElementById('map-summary');
   if (!el) return;
   if (resumenSufijo && el.textContent.endsWith(resumenSufijo)) el.textContent = el.textContent.slice(0, -resumenSufijo.length);
@@ -1567,12 +1586,12 @@ function mountChipsControl() {
   chipsEl.id = 'map-chips';
   chipsEl.setAttribute('role', 'group');
   chipsEl.setAttribute('aria-label', 'Filtrar los puntos de calor');
-  chipsEl.innerHTML = String(html`${RANGES.map(([h, label, short]) => html`<button type="button" class="chip" data-hours="${h}" aria-pressed="${h === store.get('obsHours')}">${dual(label, short)}</button>`)}
+  chipsEl.innerHTML = String(html`${chipsHorasHtml(store.get('obsHours'))}
     <button type="button" class="chip" data-reliable aria-pressed="${Boolean(store.get('obsFilter')?.reliable)}">${dual('Solo los más seguros', 'Solo confiables')}</button>`);
   // Al elegir se cierra el desplegable: el cambio se ve de inmediato en el mapa y
   // el punto de la píldora avisa que quedó un filtro distinto al de siempre.
-  chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => { setHoras(Number(b.dataset.hours)); filtrosEl.open = false; }));
-  chipsEl.querySelector('[data-reliable]').addEventListener('click', () => {
+  on(chipsEl, '[data-hours]', 'click', (b) => { setHoras(Number(b.dataset.hours)); filtrosEl.open = false; });
+  on1(chipsEl, '[data-reliable]', 'click', () => {
     const f = store.get('obsFilter');
     store.set('obsFilter', { ...f, reliable: !f.reliable });
     filtrosEl.open = false;
@@ -1609,8 +1628,8 @@ function mountChipsControl() {
 
 function syncMapChips() {
   if (!chipsEl) return;
-  chipsEl.querySelectorAll('[data-hours]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === store.get('obsHours'))));
-  chipsEl.querySelector('[data-reliable]')?.setAttribute('aria-pressed', String(Boolean(store.get('obsFilter')?.reliable)));
+  chipsEl.querySelectorAll('[data-hours]').forEach((b) => setPressed(b, Number(b.dataset.hours) === store.get('obsHours')));
+  setPressed(chipsEl.querySelector('[data-reliable]'), Boolean(store.get('obsFilter')?.reliable));
   const rango = RANGES.find((r) => r[0] === store.get('obsHours'));
   const val = filtrosEl?.querySelector('.f-val');
   if (val && rango) val.innerHTML = String(html`${dual(rango[1].replace('Últimas ', ''), rango[2])}${radio ? ` · ${radio.km} km` : ''}`);
@@ -1657,17 +1676,14 @@ function updatePlaceLines() {
   const obs = focosFiltrados().filter(isReliable);
   const features = [];
   for (const p of places) {
-    if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || !Number.isFinite(p.radius_km)) continue;
+    if (!coordsOk(p) || !Number.isFinite(p.radius_km)) continue;
     let best = null;
     for (const o of obs) {
       const km = haversineKm(p.lat, p.lon, o.lat, o.lon);
       if (km <= p.radius_km && (!best || km < best.km)) best = { o, km };
     }
-    if (!best) continue;
-    const rumbo = cardinal(bearingDeg(p.lat, p.lon, best.o.lat, best.o.lon));
-    features.push({ type: 'Feature',
-      geometry: { type: 'LineString', coordinates: [[p.lon, p.lat], [best.o.lon, best.o.lat]] },
-      properties: { label: `${fmtNum(best.km, best.km < 10 ? 1 : 0)} km · al ${rumbo}` } });
+    if (best) features.push(feat({ type: 'LineString', coordinates: [[p.lon, p.lat], [best.o.lon, best.o.lat]] },
+      { label: `${fmtNum(best.km, best.km < 10 ? 1 : 0)} km · al ${cardinal(bearingDeg(p.lat, p.lon, best.o.lat, best.o.lon))}` }));
   }
   setData('place-lines', { type: 'FeatureCollection', features });
 }
@@ -1707,13 +1723,7 @@ function regionCounts(points) {
 // se monta una sola vez por contenedor; los repintados solo actualizan los bloques de datos.
 function shellMontado(container) {
   return container.dataset?.mapaMontado === '1'
-    && Boolean(
-      container.querySelector('#map-lectura')
-      && container.querySelector('#map-search')
-      && container.querySelector('#map-search-results')
-      && container.querySelector('#explore')
-      && container.querySelector('#map-listas'),
-    );
+    && ['#map-lectura', '#map-search', '#map-search-results', '#explore', '#map-listas'].every((s) => container.querySelector(s));
 }
 
 function montarCascaron(container, { hours, f, zones }) {
@@ -1728,7 +1738,7 @@ function montarCascaron(container, { hours, f, zones }) {
     <div id="goes-gap"></div>
     <div id="goes-next"></div>
     <div id="trunc-note"></div>
-    <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${RANGES.map(([h, label, short]) => html`<button class="chip" data-hours="${h}" aria-pressed="${h === hours}">${dual(label, short)}</button>`)}</div>
+    <div class="chips chips-hours" role="group" aria-label="Desde cuándo">${chipsHorasHtml(hours)}</div>
     <div class="chips chips-dist" role="group" aria-label="${DIST_ARIA}">${chipsDistanciaHtml()}<span class="dist-desde">${textoDesde() || SIN_REF}</span></div>
     <div id="map-carga-err"></div>
     <div class="switch-row" style="margin-top:6px"><div class="grow"><b class="small">${dual('Ocultar los dudosos', 'Solo detecciones confiables')}</b><div class="tiny muted">${dual('Muestra solo los puntos que más probablemente son fuego.', 'Oculta píxeles de baja confianza (más falsos positivos).')}</div></div>
@@ -1757,16 +1767,16 @@ function montarCascaron(container, { hours, f, zones }) {
   if (exZone?.dataset) exZone.dataset.zonesKey = Object.keys(zones).sort().join(','); // misma normalización que render()
 
   // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
-  bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
-  container.querySelectorAll('[data-hours]').forEach((b) => b.addEventListener('click', () => setHoras(Number(b.dataset.hours))));
-  container.querySelectorAll('[data-dist]').forEach((b) => b.addEventListener('click', () => elegirDistancia(Number(b.dataset.dist))));
-  container.querySelector('#f-reliable')?.addEventListener('change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
-  container.querySelectorAll('[data-sensor]').forEach((b) => b.addEventListener('click', () => {
+  bindBuscarComuna(container, () => hoja('peek'));
+  on(container, '[data-hours]', 'click', (b) => setHoras(Number(b.dataset.hours)));
+  on(container, '[data-dist]', 'click', (b) => elegirDistancia(Number(b.dataset.dist)));
+  on1(container, '#f-reliable', 'change', (e) => store.set('obsFilter', { ...store.get('obsFilter'), reliable: e.target.checked }));
+  on(container, '[data-sensor]', 'click', (b) => {
     const current = store.get('obsFilter');
     store.set('obsFilter', { ...current, sensors: { ...current.sensors, [b.dataset.sensor]: current.sensors[b.dataset.sensor] === false } });
-  }));
-  container.querySelector('#report')?.addEventListener('click', () => reportForm());
-  container.querySelector('#explore')?.addEventListener('submit', (e) => { e.preventDefault(); explore(container); });
+  });
+  on1(container, '#report', 'click', () => reportForm());
+  on1(container, '#explore', 'submit', (e) => { e.preventDefault(); explore(container); });
 }
 
 export async function render(container, params) {
@@ -1779,7 +1789,6 @@ export async function render(container, params) {
   const reliable = points.filter(isReliable).length;
   const zones = store.get('config')?.zones || {};
   const regions = regionCounts(points);
-  const range = RANGES.find((r) => r[0] === hours);
   const updated = store.get('status')?.last_ingest_at;
   // VIS-03: con la carga caída «0» no es un dato — los números muestran «—» y cada bloque nombra su fuente.
   const obsFallo = store.get('obsError');
@@ -1798,20 +1807,20 @@ export async function render(container, params) {
   onReady(() => { pintarFocos(); pintarOficiales(); pintarIncidentes(); pintarCirculoRadio(); updatePlaceLines(); });
   // «a N km»: la coordenada del dato o `alt` (VIS-03: el centro publicado del incidente).
   const distDe = (o, alt) => {
-    if (!radio) return '';
-    const p = (Number.isFinite(o?.lat) && Number.isFinite(o?.lon)) ? o : alt;
-    if (!Number.isFinite(p?.lat) || !Number.isFinite(p?.lon)) return '';
+    const p = coordsOk(o) ? o : alt;
+    if (!radio || !coordsOk(p)) return '';
     const km = haversineKm(radio.lat, radio.lon, p.lat, p.lon);
     return `a ${fmtNum(km, km < 10 ? 1 : 0)} km · `;
   };
-  const official = (radio ? filtrarPorDistancia(store.get('official')?.fires || [], radio, radio.km) : (store.get('official')?.fires || [])).filter((x) => x.status !== 'extinguido');
+  // La lista CONAF usa el mismo recorte del radio que el mapa (VIS-03).
+  const official = recorta(store.get('official')?.fires || []).filter((x) => x.status !== 'extinguido');
 
   if (!shellMontado(container)) montarCascaron(container, { hours, f, zones });
 
   const lecturaEl = container.querySelector('#map-lectura');
   if (lecturaEl) {
     lecturaEl.innerHTML = String(html`
-      <p class="lectura-n"><strong data-count>${cargaFallo ? '—' : fmtNum(points.length)}</strong><span>${dual('puntos de calor', 'detecciones')}<br />${cargaFallo ? 'sin saber' : range?.[1].toLowerCase()}</span></p>
+      <p class="lectura-n"><strong data-count>${cargaFallo ? '—' : fmtNum(points.length)}</strong><span>${dual('puntos de calor', 'detecciones')}<br />${cargaFallo ? 'sin saber' : RANGES.find((r) => r[0] === hours)?.[1].toLowerCase()}</span></p>
       <dl class="lectura-d">
         <div><dt>${dual('más seguros', 'confiables')}</dt><dd>${cargaFallo ? '—' : fmtNum(reliable)}</dd><dd class="tiny">${dual('probablemente fuego', 'conf. media o alta')}</dd></div>
         <div><dt>el último</dt><dd>${cargaFallo ? '—' : (newest ? ago(newest) : '—')}</dd><dd class="tiny">${cargaFallo ? 'sin datos' : (newest ? fmtDateTime(newest) : 'sin datos')}</dd></div>
@@ -1828,10 +1837,10 @@ export async function render(container, params) {
   const truncEl = container.querySelector('#trunc-note');
   if (truncEl) truncEl.innerHTML = String(truncNote());
 
-  container.querySelectorAll('[data-hours]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.hours) === hours)));
+  container.querySelectorAll('[data-hours]').forEach((b) => setPressed(b, Number(b.dataset.hours) === hours));
   const relEl = container.querySelector('#f-reliable');
   if (relEl && document.activeElement !== relEl) relEl.checked = Boolean(f.reliable);
-  container.querySelectorAll('[data-sensor]').forEach((b) => b.setAttribute('aria-pressed', String(f.sensors[b.dataset.sensor] !== false)));
+  container.querySelectorAll('[data-sensor]').forEach((b) => setPressed(b, f.sensors[b.dataset.sensor] !== false));
   const exZone = container.querySelector('#ex-zone');
   // REND-02: la configuración puede llegar con el selector ya enfocado (antes quedaba vacío
   // para siempre): las opciones se reconcilian en el mismo nodo, conservando la zona elegida.
@@ -1848,7 +1857,7 @@ export async function render(container, params) {
     cargaErrEl.innerHTML = cargaFallo ? String(html`<div class="callout callout-warn" role="alert"><b>No pudimos cargar ${obsFallo ? 'los puntos de calor' : 'el estado de las fuentes'} ahora.</b>
       ${dataAsOf ? `Lo último que llegó es de ${ago(dataAsOf)}.` : 'Reintenta en un momento.'}
       <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" type="button" id="retry-obs">Reintentar</button></div></div>`) : '';
-    cargaErrEl.querySelector('#retry-obs')?.addEventListener('click', reintentarCarga);
+    on1(cargaErrEl, '#retry-obs', 'click', reintentarCarga);
   }
 
   const listasEl = container.querySelector('#map-listas');
@@ -1868,8 +1877,8 @@ export async function render(container, params) {
         const zone = Object.values(zones).find((z) => z.label === name);
         return html`<li><button class="row-btn" data-zone="${zone ? Object.keys(zones).find((k) => zones[k] === zone) : ''}"><span class="grow small"><b>${name === 'Fuera de Chile' ? dual('En países vecinos', 'Fuera de Chile') : name}</b></span><span class="small tabular">${fmtNum(n)}</span></button></li>`;
       })}</ul>` : cargaFallo ? html`<p class="small">No pudimos cargar los puntos de calor ahora.</p><div id="map-err"></div>` : !updated ? html`<div class="empty"><div class="glyph">◎</div><b>Aún no llegan datos de los satélites.</b> BRASA los revisa cada 10 minutos; vuelve en un rato.</div>` : html`<div class="empty"><div class="glyph">◎</div>${radio ? `No se ve calor a menos de ${radio.km} km de ${radio.origen} en este período.` : 'No se ve calor en este período.'} Ojo: que no aparezca no garantiza que no haya fuego (puede haber nubes o humo).</div>`}`);
-    listasEl.querySelectorAll('[data-zone]').forEach((b) => b.addEventListener('click', () => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); }));
-    listasEl.querySelectorAll('[data-official]').forEach((b) => b.addEventListener('click', () => {
+    on(listasEl, '[data-zone]', 'click', (b) => { const z = zones[b.dataset.zone]; if (z) fitBbox(z.bbox); });
+    on(listasEl, '[data-official]', 'click', (b) => {
       const f = store.get('official').fires.find((x) => String(x.id) === b.dataset.official);
       if (!f) return;
       // La ficha va antes del vuelo (MAPA-162/168): al abrir ella misma baja la hoja a
@@ -1878,7 +1887,7 @@ export async function render(container, params) {
       // y la hoja nunca volvía a su altura.
       popupOficial(f, [f.lon, f.lat]);
       fly(f.lon, f.lat, 11.5);
-    }));
+    });
     // UX-77: con la carga caída el bloque compartido muestra teléfonos y «Reintentar» (VIS-03).
     const errHost = listasEl.querySelector('#map-err');
     if (errHost) errorConSalida(errHost, store.get('statusError') || store.get('obsError'), reintentarCarga);
@@ -1888,7 +1897,7 @@ export async function render(container, params) {
   if (sourcesEl) sourcesEl.innerHTML = String(sourcesBlock());
 
   pintarDistancia();
-  pintarResumenRadio();
+  pintarResumen();
   if (params?.panel === 'fuentes') container.querySelector('#fuentes')?.scrollIntoView();
 }
 
@@ -1951,7 +1960,7 @@ function ajustarHojaLectura(container) {
   if (!lectura) return;
   requestAnimationFrame(() => {
     if (!mounted || document.documentElement.dataset.sheet !== 'peek') return;
-    if (lectura.getBoundingClientRect().bottom > container.getBoundingClientRect().bottom + 1) document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' }));
+    if (lectura.getBoundingClientRect().bottom > container.getBoundingClientRect().bottom + 1) hoja('half');
   });
 }
 
@@ -1972,7 +1981,8 @@ export default {
         res.addEventListener?.('change', alCambiar);
       }).catch(() => {});
     }
-    onReady(() => { if (mounted && seq === mountSeq) getMap()?.on('idle', pintarResumenRadio); });
+    // REND-02: el listener de teselas de infraestructura vive con la vista (se retira al desmontar).
+    onReady(() => { const m = getMap(); if (mounted && seq === mountSeq && m) { m.on('idle', pintarResumen); m.on('moveend', onInfraMove); } });
     // Vista compartible: #/mapa?capas=focos,riesgo fija las capas del control.
     const fromUrl = capasFromUrl(params?.capas);
     if (fromUrl) {
@@ -1994,7 +2004,7 @@ export default {
     $('#map-legend').classList.add('mobile-show');
     onReady(() => { if (mounted && seq === mountSeq) bindMap(); });
     loadReports();
-    loadOfficial().then(() => mounted && keepPlace(container, () => render(container, {})));
+    loadOfficial().then(repintar);
     if (layers.risk || layers.rain) loadRisk();
     loadIncidents();
     if (layers.scars) loadScars();
@@ -2006,12 +2016,12 @@ export default {
     if (params?.lat && params?.lon) fly(Number(params.lon), Number(params.lat), Number(params.z) || 11);
     await render(container, params);
     ajustarHojaLectura(container);
-    ultimoRefrescoIncidentes = Date.now(); // incidentes y CONAF recién cargados arriba
+    ultimoRefresco = Date.now(); // incidentes y CONAF recién cargados arriba
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
     // 'config' (REND-02): las zonas FIRMS y el aviso de GOES llegan con la configuración, a
     // veces tras el primer pintado; el forEach evita suscripciones acumuladas al remontar.
     unsubs.forEach((u) => u());
-    unsubs = ['observations', 'obsFilter', 'places', 'config'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    unsubs = ['observations', 'obsFilter', 'places', 'config'].map((k) => store.on(k, repintar));
     // MAPA-164: la fila de chips y el aviso de fondo sin conexión viven fuera del
     // panel — no se repintan con render, así que cada uno tiene su suscripción.
     unsubs.push(store.on('obsHours', () => mounted && syncMapChips()));
@@ -2022,17 +2032,17 @@ export default {
       syncOfflineUi({ autoCambiar: true });
     }));
     if (store.get('basemapOffline')) syncOfflineUi();
-    const onOnline = () => { autoCambioMapaOfflineHecho = false; };
+    const onOnline = () => { autoOfflineHecho = false; };
     window.addEventListener('online', onOnline);
     unsubs.push(() => window.removeEventListener('online', onOnline));
     unsubs.push(store.on('theme', () => mounted && layers.aire && legend()));
     // VIS-03: el «no pudimos cargar» aparece al fallar la vuelta, no solo al repintar por datos.
-    const alCambiarFallo = () => {
+    const alFallo = () => {
       const hay = Boolean(store.get('obsError') || store.get('statusError'));
-      if (mounted && hay !== falloVisto) { falloVisto = hay; keepPlace(container, () => render(container, {})); }
+      if (mounted && hay !== falloVisto) { falloVisto = hay; repintar(); }
     };
-    unsubs.push(store.on('obsError', alCambiarFallo));
-    unsubs.push(store.on('statusError', alCambiarFallo));
+    unsubs.push(store.on('obsError', alFallo));
+    unsubs.push(store.on('statusError', alFallo));
     // MAPA-163: el mismo lote refresca incidentes y CONAF (con tope y solo visible).
     unsubs.push(store.on('observations', alLlegarObservaciones));
     // MAPA-165: enlaces de «Compartir» (foco=/conaf=) abren la ficha cuando su dato llega.
@@ -2084,13 +2094,11 @@ export default {
       }
     };
     const onToqueVacio = () => { cerrarPanelesMapa({ restaurarFoco: false }); };
-    const onTerrenoDemCambio = () => { if (mounted) { legend(); syncBasemapCredit(); } };
-    document.addEventListener('keydown', onKeydown);
-    document.addEventListener('brasa:toque-vacio', onToqueVacio);
-    document.addEventListener('brasa:terreno-dem-cambio', onTerrenoDemCambio);
-    unsubs.push(() => document.removeEventListener('keydown', onKeydown));
-    unsubs.push(() => document.removeEventListener('brasa:toque-vacio', onToqueVacio));
-    unsubs.push(() => document.removeEventListener('brasa:terreno-dem-cambio', onTerrenoDemCambio));
+    const alTerreno = () => { if (mounted) { legend(); syncBasemapCredit(); } };
+    for (const [ev, fn] of [['keydown', onKeydown], ['brasa:toque-vacio', onToqueVacio], ['brasa:terreno-dem-cambio', alTerreno]]) {
+      document.addEventListener(ev, fn);
+      unsubs.push(() => document.removeEventListener(ev, fn));
+    }
     unsubs.push(store.on('status', () => {
       const el = mounted && container.querySelector('#sources-block');
       if (el) el.innerHTML = String(sourcesBlock());
@@ -2104,16 +2112,18 @@ export default {
     mounted = false;
     limpiarReencuadre?.();
     limpiarReencuadre = null;
-    autoCambioMapaOfflineHecho = false;
-    descargaZonaCtrl?.abort();
-    hojaAntesControl = null;
+    autoOfflineHecho = false;
+    descargaCtrl?.abort();
+    hojaPrev = null;
     pendienteFoco = pendienteConaf = null;
     unsubs.forEach((u) => u());
     // VIS-03: al salir todas las capas compartidas quedan con todo Chile y se
     // quitan el círculo y el sufijo del resumen.
-    getMap()?.off('idle', pintarResumenRadio);
+    const m = getMap();
+    m?.off('idle', pintarResumen);
+    m?.off('moveend', onInfraMove);
     radio = null;
-    pintarResumenRadio();
+    pintarResumen();
     pintarCirculoRadio();
     pintarFocos();
     pintarOficiales();
@@ -2123,7 +2133,7 @@ export default {
     // El viento dibuja en un canvas aparte de MapLibre: apagarlo exige apagar() —
     // show() solo cambia el resumen. layers.viento se conserva: al volver, mount()
     // lo recarga si seguía prendido.
-    if (layers.viento) { vientoInfo = null; vientoVieja = false; import('../viento.js').then((m) => m.apagar()); }
+    if (layers.viento) apagarViento();
     cerrarPopup();
     soltar.forEach((s) => s());
     soltar = [];

@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+**Infraestructura por encuadre (REND-02, quinta tanda)**
+- La capa de infraestructura crítica descarga el índice y las teselas del encuadre visible desde zoom 10, en vez del archivo nacional completo. Conserva todos los puntos, líneas, coordenadas y atribuciones; las líneas compartidas entre teselas se muestran una sola vez. Si el índice o una tesela no llega, la capa se apaga con el mismo aviso de antes, sin mostrar un encuadre a medias.
+- La medición de CI separa el costo de infraestructura, viento y teselas del mapa. Los ahorros y la comparación quedan pendientes del CI, sin aumentar los presupuestos.
+
 **Contabilidad diaria de Open-Meteo (REND-02, cuarta tanda)**
 - El cupo meteorológico se registra de forma persistente y atómica para que los pedidos simultáneos no pierdan sumas. Las tareas con presupuesto (riesgo, FWI y lluvia) y las consultas de las vistas (tiempo en un punto, clima de un caso, lluvia y terreno, punto de riesgo) reservan su cupo antes de consultar y ceden cuando el día no da, igual que cuando el proveedor falla; la reserva de seguridad de los avisos queda intacta.
 - Lo servido se cobra al día en que salió cada petición: al cruzar la medianoche solo sale a la red lo que el día nuevo puede cubrir. Una petición interrumpida después de salir conserva lo enviado; un fallo de red o un 429 cuesta cero y devuelve lo reservado. Se mantienen los límites diarios y el camino de avisos sin bloqueos nuevos.

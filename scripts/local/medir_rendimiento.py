@@ -17,6 +17,25 @@ contenido real (consultado en web/js/views/) y, cuando existe, un selector de fa
 explícito (bloque «Reintentar»). Los estados intermedios quedan como timeout, también
 conservados.
 
+REND-02 tanda 5: cada muestra desglosa además sus bytes por grupo de recurso
+(infraestructura, viento, teselas de mapa, datos estáticos, API y resto de la app), y la
+ruta `mapa-capas` mide el costo de prender capas (infraestructura crítica y viento),
+esperando tras el contenido usable a que la red de esos grupos quede quieta para que sus
+bytes no se pierdan.
+
+La ruta `mapa-capas-santiago` repite esa combinación acercada a una ubicación real
+representativa (centro de Santiago, z=11) con los parámetros lat/lon/z que la vista
+interpreta al montar: `directo` mide el encendido inicial ya encuadrado, `desdePortada`
+la navegación SPA hasta el encuadre acercado y `reingreso` el encuadre repetido con los
+módulos calientes. El contenido usable llega mientras el vuelo animado sigue en curso y
+las teselas de infraestructura solo se piden tras `moveend`: antes de la ventana de red
+quieta se espera el encuadre de forma verificable (zoom objetivo con tolerancia y mapa
+sin movimiento, consultando getMap de /web/js/map.js desde la página) con el resto del
+timeout del paso como límite. Si el encuadre o la red quieta no se confirman dentro del
+timeout del paso, ese timeout queda registrado como error del medidor y la muestra
+incompleta (sus bytes pueden estar truncados); el tiempo hasta el contenido usable no se
+toca.
+
 Uso (compatible con la medición anterior: BASE OUT y opcionalmente filtros):
 
     python scripts/local/medir_rendimiento.py <BASE> <OUT_DIR> [filtros]
@@ -64,6 +83,13 @@ _CLIENTES_CI = itertools.count(1)
 # comparar el azar de terceros; --integracion-real las permite y se registra aparte.
 ORIGENES_EXTERNOS = ('tiles.openfreemap.org', 'gibs.earthdata.nasa.gov')
 
+# Desglose de bytes por grupo de recurso (REND-02 tanda 5): el costo de red de una
+# muestra separado por qué lo causó. `teselasMapa` son las fuentes externas de arriba
+# (bloqueadas por defecto: cuentan los pedidos abortados, sin bytes); `app` es el cascarón
+# propio (documento, JS, CSS, service worker y demás); `otros`, cualquier tercero que no
+# sea teselas. Todos los grupos aparecen siempre en el desglose, aunque no medan nada.
+GRUPOS_RECURSOS = ('infraestructura', 'viento', 'teselasMapa', 'datosEstaticos', 'api', 'app', 'otros')
+
 DISPOSITIVOS = {
     'movil': {'ancho': 390, 'alto': 844, 'tactil': True, 'esMovil': True, 'escala': 2},
     'escritorio': {'ancho': 1280, 'alto': 900, 'tactil': False, 'esMovil': False, 'escala': 1},
@@ -91,6 +117,40 @@ RUTAS = {
     'mapa': {'url': '/#/mapa', 'hash': '#/mapa', 'tipo': 'spa',
              'listo': '#map-listas h2', 'fallo': '#map-carga-err .callout-warn, #map-err .callout-warn',
              'nota': 'las listas de la hoja llegan con los datos, no con el cascarón'},
+    # REND-02 tanda 5: costo medido de prender capas (infraestructura crítica y viento).
+    # Los nombres son los públicos de web/js/capas.js (`url:` de CAPAS) y van en el orden
+    # del control, el mismo con el que la vista reescribe la URL (capasToUrl): el hash queda
+    # estable y el recolector no pierde el criterio. En el encuadre inicial (país) la
+    # infraestructura no debe pedir teselas (loadInfra solo baja el índice
+    # /web/data/infraestructura/indice.json y corta bajo zoom 10, INFRA_MINZOOM): se mide
+    # el costo de prender la capa (el índice y /api/wind/grid), no el de pintarla. Tras el
+    # contenido usable, `redQuieta` espera a que no queden pedidos en vuelo de esos grupos
+    # (~500 ms) antes de cerrar la medición del paso, para que sus bytes no se pierdan.
+    'mapa-capas': {'url': '/#/mapa?capas=focos,viento,infraestructura',
+                   'hash': '#/mapa?capas=focos,viento,infraestructura', 'tipo': 'spa',
+                   'listo': '#map-listas h2', 'fallo': '#map-carga-err .callout-warn, #map-err .callout-warn',
+                   'redQuieta': ('infraestructura', 'viento')},
+    # REND-02: la misma combinación de capas, acercada a Santiago con los parámetros
+    # lat/lon/z que la vista interpreta al montar (fly al encuadre; con lat/lon la vista
+    # no reencuadra a los focos). El zoom 11 supera INFRA_MINZOOM (10): tras el vuelo,
+    # loadInfra pide las teselas de 1° del encuadre —la clave es su esquina suroeste:
+    # -34_-71, la tesela real más grande del catastro. `encuadre` declara el zoom
+    # esperado: el contenido usable llega mientras el vuelo animado sigue en curso y las
+    # teselas solo se piden tras moveend, así que antes de la ventana de red quieta se
+    # espera el encuadre de forma verificable (zoom objetivo con tolerancia y mapa sin
+    # movimiento, consultando getMap de /web/js/map.js desde la página) y recién ahí se
+    # cierran los bytes; el tiempo util del paso no se toca. El hash lleva todos los
+    # parámetros porque updateCapasUrl conserva los que no son `capas` al reescribirlo y
+    # el recolector exige hash exacto; `capas` va en el orden del control para que esa
+    # reescritura sea idéntica (hash estable durante toda la muestra). Sin depender de
+    # terceros: MapLibre viaja con la app y las teselas de infraestructura son archivos
+    # estáticos del propio despliegue.
+    'mapa-capas-santiago': {'url': '/#/mapa?capas=focos,viento,infraestructura&lat=-33.45&lon=-70.66&z=11',
+                            'hash': '#/mapa?capas=focos,viento,infraestructura&lat=-33.45&lon=-70.66&z=11',
+                            'tipo': 'spa',
+                            'listo': '#map-listas h2', 'fallo': '#map-carga-err .callout-warn, #map-err .callout-warn',
+                            'encuadre': {'zoom': 11},
+                            'redQuieta': ('infraestructura', 'viento')},
     'riesgo': {'url': '/#/riesgo', 'hash': '#/riesgo', 'tipo': 'spa',
                'listo': '#r-search', 'fallo': '#view .callout-warn [data-retry]',
                'nota': 'el buscador solo está en el render con pronóstico'},
@@ -225,6 +285,30 @@ def clasificar_url(url: str, base: str, bloqueadas: bool = True) -> str:
     return 'producto' if mismo_origen(url, base) else 'externo'
 
 
+def grupo_de_url(url: str, base: str) -> str:
+    """Grupo de recurso de un pedido para el desglose de bytes (ver GRUPOS_RECURSOS).
+
+    Los prefijos más específicos se prueban antes que los generales: la infraestructura
+    crítica (/web/data/infraestructura/…) es datos estáticos, pero se informa aparte, y la
+    grilla de viento (/api/wind/…) es API, pero también. Las teselas de mapa base son las
+    fuentes externas de ORIGENES_EXTERNOS.
+    """
+    if es_externa(url):
+        return 'teselasMapa'
+    if not mismo_origen(url, base):
+        return 'otros'
+    ruta = urlparse(url).path
+    if ruta.startswith('/web/data/infraestructura/'):
+        return 'infraestructura'
+    if ruta.startswith('/api/wind/'):
+        return 'viento'
+    if ruta.startswith('/web/data/'):
+        return 'datosEstaticos'
+    if ruta.startswith('/api/'):
+        return 'api'
+    return 'app'
+
+
 def clase_texto(texto: str) -> str:
     """Clase de un mensaje de consola o de JS por su contenido (menciona una fuente externa)."""
     bajo = (texto or '').lower()
@@ -252,29 +336,55 @@ def estado_global(pasos: dict) -> str:
     return 'mixto'
 
 
-def resumen_red(pedidos: dict) -> dict:
+def resumen_red(pedidos: dict, base: str) -> dict:
     """Bytes por la red (encodedDataLength de respuestas servidas por red) y desde caché/SW.
 
     encodedDataLength es el tamaño en el cable (comprimido): no se suma como si fuera
     bytes decodificados (eso CDP no lo entrega por pedido). Los duplicados se cuentan:
-    una misma URL puede pedirse más de una vez.
+    una misma URL puede pedirse más de una vez. Además desglosa por grupo de recurso
+    (grupo_de_url): de cada grupo, n pedidos, bytesRed, bytesCache y duplicados; todos
+    los grupos aparecen siempre, midan o no (los grupos vacíos también dicen algo).
     """
     por_tipo = {}
+    por_grupo = {g: {'n': 0, 'bytesRed': 0, 'bytesCache': 0, 'duplicados': 0, '_urls': set()}
+                 for g in GRUPOS_RECURSOS}
     for p in pedidos.values():
         t = por_tipo.setdefault(p.get('tipo', 'Other'), {'n': 0, 'bytesRed': 0, 'bytesCache': 0})
         t['n'] += 1
+        grupo = por_grupo[grupo_de_url(p.get('url', ''), base)]
+        grupo['n'] += 1
+        url = p.get('url', '')
+        if url in grupo['_urls']:
+            grupo['duplicados'] += 1
+        else:
+            grupo['_urls'].add(url)
         if p.get('desdeCache') or p.get('desdeSw'):
             t['bytesCache'] += p.get('bytes', 0)
+            grupo['bytesCache'] += p.get('bytes', 0)
         else:
             t['bytesRed'] += p.get('bytes', 0)
+            grupo['bytesRed'] += p.get('bytes', 0)
+    for grupo in por_grupo.values():
+        del grupo['_urls']
     urls = [p.get('url', '') for p in pedidos.values()]
     unicos = len(set(urls))
     return {
         'bytesRed': sum(t['bytesRed'] for t in por_tipo.values()),
         'bytesCache': sum(t['bytesCache'] for t in por_tipo.values()),
         'pedidos': len(pedidos), 'pedidosUnicos': unicos, 'duplicados': len(urls) - unicos,
-        'porTipo': por_tipo,
+        'porTipo': por_tipo, 'porGrupo': por_grupo,
     }
+
+
+def valores_grupo(completas: list, grupo: str, campo: str) -> list:
+    """Valores de un campo del desglose por grupo, solo de muestras completas que lo traen."""
+    salida = []
+    for m in completas:
+        datos = ((m.get('bytes') or {}).get('porGrupo') or {}).get(grupo) or {}
+        valor = datos.get(campo)
+        if valor is not None:
+            salida.append(valor)
+    return salida
 
 
 def resumir_muestras(muestras: list) -> dict:
@@ -305,6 +415,18 @@ def resumir_muestras(muestras: list) -> dict:
     bytes_cache = [m['bytes']['bytesCache'] for m in completas if (m.get('bytes') or {}).get('bytesCache') is not None]
     med_c, _ = mediana_peor(bytes_cache)
     res['bytes'] = {'bytesRedMediana': med_b, 'bytesRedPeor': peor_b, 'bytesCacheMediana': med_c}
+    # Desglose por grupo de recurso (REND-02 tanda 5): mediana/peor solo con muestras
+    # completas, como el resto. Los grupos sin pedidos quedan en None (se omiten en el
+    # informe, no en el JSON).
+    res['bytes']['porGrupo'] = {}
+    for grupo in GRUPOS_RECURSOS:
+        med_rg, peor_rg = mediana_peor(valores_grupo(completas, grupo, 'bytesRed'))
+        res['bytes']['porGrupo'][grupo] = {
+            'nMediana': mediana_peor(valores_grupo(completas, grupo, 'n'))[0],
+            'bytesRedMediana': med_rg, 'bytesRedPeor': peor_rg,
+            'bytesCacheMediana': mediana_peor(valores_grupo(completas, grupo, 'bytesCache'))[0],
+            'duplicadosMediana': mediana_peor(valores_grupo(completas, grupo, 'duplicados'))[0],
+        }
     inter = [m.get('interaccionRafMs') for m in completas if m.get('interaccionRafMs') is not None]
     med_i, _ = mediana_peor(inter)
     res['interaccion'] = {'rafSinteticoMedianaMs': med_i, 'n': len(inter)}
@@ -546,7 +668,7 @@ class Seguimiento:
         pedido = e.get('request') or {}
         self.pedidos.setdefault(e.get('requestId'), {
             'url': pedido.get('url', ''), 'tipo': e.get('type', 'Other'),
-            'bytes': 0, 'desdeCache': False, 'desdeSw': False, 'estado': None})
+            'bytes': 0, 'desdeCache': False, 'desdeSw': False, 'estado': None, 'fin': False})
 
     def _al_respuesta(self, e: dict) -> None:
         p = self.pedidos.get(e.get('requestId'))
@@ -566,6 +688,7 @@ class Seguimiento:
         p = self.pedidos.get(e.get('requestId'))
         if p is not None:
             p['bytes'] = e.get('encodedDataLength') or 0
+            p['fin'] = True  # sin pedidos en vuelo se mide la red quieta de las capas
 
     def _al_fallo_red(self, e: dict) -> None:
         p = self.pedidos.get(e.get('requestId'))
@@ -613,6 +736,154 @@ def instalar_rutas(ctx, opciones: dict) -> None:
             ctx.route(f'https://{host}/**', manejador)
     if retraso:
         ctx.route('**/api/config', manejador)
+
+
+# Rutas con capas (mapa-capas): tras el contenido usable, la red de esos grupos debe quedar
+# quieta (sin pedidos en vuelo) durante ~500 ms antes de cerrar la medición del paso, con
+# tope dentro del timeout del paso. Los bytes de infraestructura y de la grilla de viento
+# llegan después del primer render; sin esta espera se perderían del desglose.
+RED_QUIETA_MS = 500
+RED_QUIETA_ENCUESTA_MS = 100
+
+# Encuadre esperado (mapa-capas-santiago): el contenido usable llega mientras el vuelo
+# animado sigue en curso y las teselas de infraestructura solo se piden tras `moveend`.
+# Sin esperar el encuadre, la ventana de red quieta podría cerrar los bytes antes del
+# pedido real. La verificación consulta el mapa real de la página vía `getMap` de
+# /web/js/map.js (la vista ya hace import() dinámico de módulos propios, así la CSP lo
+# permite): zoom objetivo con tolerancia y mapa sin movimiento.
+ENCUADRE_ENCUESTA_MS = 100
+ENCUADRE_TOLERANCIA_ZOOM = 0.25
+
+
+def pedidos_en_vuelo(pedidos: dict, base: str, grupos) -> list:
+    """URLs de pedidos de `grupos` sin término (ni carga completa ni fallo de red)."""
+    return [p.get('url', '') for p in pedidos.values()
+            if grupo_de_url(p.get('url', ''), base) in grupos
+            and not p.get('fin') and not p.get('fallo')]
+
+
+def esperar_red_quieta(seguimiento, page, base: str, grupos, tope_ms: int,
+                       ventana_ms: int = RED_QUIETA_MS) -> bool:
+    """Espera a que ningún pedido de `grupos` esté en vuelo durante `ventana_ms` seguidos.
+
+    Encuesta cada 100 ms con tope en `tope_ms` (el tiempo que queda del paso). El límite
+    es estricto: la última encuesta se recorta a lo que quede del tope, así la espera
+    nunca lo sobrepasa (antes dormía los 100 ms completos aunque el tope estuviera a
+    pocos milisegundos de vencer). Si el tope vence sin confirmar la ventana, devuelve
+    False: es un mejor esfuerzo, no un error propio ni del producto (los bytes que
+    llegaron quedan en la muestra y la medición sigue).
+    """
+    if tope_ms <= 0:
+        return False
+    fin = time.monotonic() + tope_ms / 1000
+    quieta_desde = None
+    while True:
+        ahora = time.monotonic()
+        if pedidos_en_vuelo(seguimiento.pedidos, base, grupos):
+            quieta_desde = None
+        else:
+            if quieta_desde is None:
+                quieta_desde = ahora
+            if ahora - quieta_desde >= ventana_ms / 1000:
+                return True
+        if ahora >= fin:
+            return False
+        try:
+            page.wait_for_timeout(min(RED_QUIETA_ENCUESTA_MS, max(0, round((fin - ahora) * 1000))))
+        except Exception:
+            return False
+
+
+def js_estado_encuadre() -> str:
+    """JS evaluado en la página: importa el módulo real del mapa y reporta zoom y movimiento.
+
+    /web/js/map.js ya está cargado por la propia vista del mapa: el import() dinámico
+    devuelve esa misma instancia (la app usa import() dinámico de módulos propios, así que
+    la CSP lo permite). getMap/getZoom/isMoving son la API pública de MapLibre expuesta
+    por map.js; el veredicto (tolerancia de zoom) lo decide Python, una sola fuente.
+    """
+    return """async () => {
+      try {
+        const m = await import('/web/js/map.js');
+        const map = typeof m.getMap === 'function' ? m.getMap() : null;
+        if (!map) return { razon: 'sin-mapa' };
+        return { zoom: map.getZoom(), moviendo: map.isMoving() };
+      } catch (e) {
+        return { razon: 'sin-modulo', error: String(e).slice(0, 120) };
+      }
+    }"""
+
+
+def encuadre_listo(estado, encuadre: dict) -> bool:
+    """True si el mapa llegó al encuadre declarado: zoom objetivo con tolerancia y sin movimiento."""
+    zoom = (estado or {}).get('zoom')
+    if zoom is None:
+        return False
+    return zoom >= encuadre['zoom'] - ENCUADRE_TOLERANCIA_ZOOM and not (estado or {}).get('moviendo')
+
+
+def esperar_encuadre(page, encuadre: dict, tope_ms: int) -> bool:
+    """Espera a que el mapa llegue al encuadre declarado (vuelo animado incluido), con tope estricto.
+
+    El fly al encuadre es animado: el contenido usable llega antes de que termine y las
+    teselas de infraestructura solo se piden tras `moveend`. La encuesta duerme lo que
+    quede del tope (como esperar_red_quieta): la espera total nunca lo sobrepasa. Si el
+    tope vence sin confirmar el encuadre, devuelve False: mejor esfuerzo que registra
+    quien llama; los bytes que llegaron quedan en la muestra.
+    """
+    if tope_ms <= 0:
+        return False
+    fin = time.monotonic() + tope_ms / 1000
+    while True:
+        ahora = time.monotonic()
+        try:
+            estado = page.evaluate(js_estado_encuadre())
+        except Exception:
+            estado = None
+        if encuadre_listo(estado, encuadre):
+            return True
+        if ahora >= fin:
+            return False
+        try:
+            page.wait_for_timeout(min(ENCUADRE_ENCUESTA_MS, max(0, round((fin - ahora) * 1000))))
+        except Exception:
+            return False
+
+
+def calmar_red_de_ruta(ruta: dict, seguimiento, page, base: str, estado_paso: str,
+                       inicio_paso: float, opciones: dict, paso: str | None = None):
+    """Aplica las esperas de la ruta tras un paso util: primero el encuadre, después la red quieta.
+
+    El tope de cada espera es lo que queda del timeout del paso: ninguna lo excede. En
+    fallos y timeouts no se espera (no hay contenido usable que seguir cargando). Devuelve
+    None si la ruta no declara esperas o el paso no llegó a util, True si el encuadre y la
+    red quedaron confirmados dentro del tope y False si alguno venció: ese False no se
+    ignora. Con `paso` se registra como timeout explícito del medidor (tipo `encuadre` o
+    `redQuieta`), la muestra queda incompleta (sus bytes pueden estar truncados) y el
+    tiempo util del paso se conserva intacto: nada se descarta y nada se contamina.
+    """
+    grupos = ruta.get('redQuieta')
+    encuadre = ruta.get('encuadre')
+    if not (grupos or encuadre) or estado_paso != 'util':
+        return None
+    if encuadre is not None:
+        tope = opciones['timeoutMs'] - int((time.monotonic() - inicio_paso) * 1000)
+        if not esperar_encuadre(page, encuadre, tope):
+            if paso is not None:
+                seguimiento.error({'tipo': 'encuadre', 'paso': paso, 'clase': 'medidor',
+                                   'texto': f"el mapa no llegó al encuadre esperado (zoom >= "
+                                            f"{encuadre['zoom'] - ENCUADRE_TOLERANCIA_ZOOM} sin movimiento) "
+                                            f"dentro del timeout del paso: los bytes del encuadre pueden estar truncados"})
+            return False
+    if grupos:
+        tope = opciones['timeoutMs'] - int((time.monotonic() - inicio_paso) * 1000)
+        if not esperar_red_quieta(seguimiento, page, base, grupos, tope):
+            if paso is not None:
+                seguimiento.error({'tipo': 'redQuieta', 'paso': paso, 'clase': 'medidor',
+                                   'texto': f"la red de {', '.join(grupos)} no quedó quieta dentro del "
+                                            f"timeout del paso: sus bytes pueden estar truncados"})
+            return False
+    return True
 
 
 def metricas_cdp(client) -> dict:
@@ -753,8 +1024,17 @@ def registrar_estado_paso(seguimiento: Seguimiento, paso: str, estado: str, esce
                        'texto': f"el paso {paso} terminó en estado {estado}"})
 
 
-def preparar(ctx, page, base: str, ruta_id: str, opciones: dict) -> bool:
-    """Calienta el service worker (y su caché) y la ruta: portada, SW listo y la propia ruta. No se mide."""
+def preparar(ctx, page, base: str, ruta_id: str, opciones: dict, seguimiento=None) -> bool:
+    """Calienta el service worker (y su caché) y la ruta: portada, SW listo y la propia ruta. No se mide.
+
+    En rutas con `encuadre` espera primero el vuelo al encuadre (zoom objetivo con
+    tolerancia, mapa sin movimiento) y en rutas con `redQuieta` espera después (con el
+    seguimiento de la preparación) a que esa red quede quieta: sin eso, la caché caliente
+    mediría sin los bytes de las capas que aún viajaban y, en offline, la capa de
+    infraestructura fallaría al montar por no estar su índice ni sus teselas en la caché
+    del SW (y al revertirse, la vista reescribe el hash del criterio). Una preparación que
+    no confirma el encuadre o la red no se da por buena: se reporta.
+    """
     ruta = RUTAS[ruta_id]
     try:
         page.goto(url_de_ruta(base, '/'), wait_until='domcontentloaded', timeout=opciones['timeoutMs'])
@@ -768,6 +1048,15 @@ def preparar(ctx, page, base: str, ruta_id: str, opciones: dict) -> bool:
         page.wait_for_function('([s, m]) => { const el = document.querySelector(s); return !!(el && (el.innerText || "").trim().length >= m); }',
                                arg=[ruta['listo'], ruta.get('minTexto') or 0], timeout=opciones['timeoutMs'])
         page.wait_for_timeout(800)
+        # El encuadre primero, la red quieta después: las teselas de infraestructura solo
+        # se piden tras moveend y sin esto la preparación cortaría antes de que existan.
+        encuadre = ruta.get('encuadre')
+        if encuadre and not esperar_encuadre(page, encuadre, opciones['timeoutMs']):
+            return False
+        grupos = ruta.get('redQuieta')
+        if grupos and seguimiento is not None and \
+                not esperar_red_quieta(seguimiento, page, base, grupos, opciones['timeoutMs']):
+            return False
         return True
     except Exception:
         return False
@@ -836,7 +1125,7 @@ def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: in
         seguimiento.enganchar(ctx, page)
         if escenario['cache'] in ('caliente', 'offline'):
             # Preparación de caché (no medida): fría no prepara nada, caliente y offline sí.
-            if not preparar(ctx, page, base, ruta_id, opciones):
+            if not preparar(ctx, page, base, ruta_id, opciones, seguimiento):
                 seguimiento.error({'tipo': 'preparacion', 'clase': 'producto',
                                    'texto': 'la preparación de caché no terminó dentro del timeout'})
                 raise RuntimeError('preparación de caché fallida')
@@ -847,10 +1136,13 @@ def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: in
 
         # Paso directo: primer acceso a la URL (documento nuevo; en rutas profundas, de golpe).
         page.goto('about:blank')
+        inicio_paso = time.monotonic()
         leer = ir_y_esperar(page, base, ruta, opciones)
         muestra['pasos']['directo'] = paso_de_leer(leer)
         registrar_estado_paso(seguimiento, 'directo', muestra['pasos']['directo']['estado'], escenario)
         muestra['documento'] = documento_de_leer(leer)
+        calmar_red_de_ruta(ruta, seguimiento, page, base, muestra['pasos']['directo']['estado'],
+                           inicio_paso, opciones, paso='directo')
 
         if ruta['tipo'] == 'spa':
             if ruta_id != 'mi-zona':
@@ -859,9 +1151,13 @@ def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: in
                 leer_portada = ir_y_esperar(page, base, RUTAS['mi-zona'], opciones)
                 if (leer_portada.get('ruta') or {}).get('estado') == 'util':
                     reiniciar_ruta(page, criterio_de(ruta_id))
+                    inicio_paso = time.monotonic()
                     ir_a_hash(page, ruta['hash'])
                     leer = esperar_ruta(page, opciones['timeoutMs'])
                     muestra['pasos']['desdePortada'] = paso_de_leer(leer)
+                    calmar_red_de_ruta(ruta, seguimiento, page, base,
+                                       muestra['pasos']['desdePortada']['estado'], inicio_paso, opciones,
+                                       paso='desdePortada')
                 else:
                     muestra['pasos']['desdePortada'] = {'estado': 'timeout', 'ms': None, 'cls': None,
                                                         'tareasLargasMs': None, 'nTareasLargas': 0}
@@ -874,10 +1170,13 @@ def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: in
             ir_a_hash(page, RUTAS[distractor]['hash'])
             esperar_ruta(page, opciones['timeoutMs'])  # contexto: el distractor no se registra
             reiniciar_ruta(page, criterio_de(ruta_id))
+            inicio_paso = time.monotonic()
             ir_a_hash(page, ruta['hash'])
             leer = esperar_ruta(page, opciones['timeoutMs'])
             muestra['pasos']['reingreso'] = paso_de_leer(leer)
             registrar_estado_paso(seguimiento, 'reingreso', muestra['pasos']['reingreso']['estado'], escenario)
+            calmar_red_de_ruta(ruta, seguimiento, page, base, muestra['pasos']['reingreso']['estado'],
+                               inicio_paso, opciones, paso='reingreso')
         else:
             # Páginas estáticas: el reingreso es una recarga del documento (caché HTTP/SW ya caliente).
             page.goto('about:blank')
@@ -904,7 +1203,7 @@ def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: in
         except Exception:
             pass
         muestra['procesamiento'] = delta_procesamiento(cpu_base, metricas_cdp(seguimiento.client))
-        muestra['bytes'] = resumen_red(seguimiento.pedidos)
+        muestra['bytes'] = resumen_red(seguimiento.pedidos, base)
         muestra['errores'] = list(seguimiento.errores)
         requeridos = {'directo', 'reingreso'}
         if ruta['tipo'] == 'spa' and ruta_id != 'mi-zona':
@@ -967,6 +1266,16 @@ def _par_ms(mediana, peor):
     return '—' if mediana is None else f"{mediana} ({peor}) ms"
 
 
+def _par_b(mediana, peor):
+    return '—' if mediana is None else f"{mediana} ({peor}) B"
+
+
+def grupo_informa(g: dict) -> bool:
+    """True si el grupo midió algo: una fila de puros ceros no aporta al informe (el JSON la conserva)."""
+    return bool(g) and any(g.get(k) for k in ('nMediana', 'bytesRedMediana', 'bytesRedPeor',
+                                              'bytesCacheMediana', 'duplicadosMediana'))
+
+
 def informe_markdown(datos: dict) -> str:
     meta = datos.get('metadatos', {})
     lineas = [
@@ -996,6 +1305,21 @@ def informe_markdown(datos: dict) -> str:
             f"{_par_ms(doc['lcpMedianaMs'], doc['lcpPeorMs'])} | "
             f"{res['bytes'].get('bytesRedMediana')} B | "
             f"{err.get('producto')}/{err.get('externo')}/{err.get('bloqueado')}/{err.get('esperado')} |")
+    lineas += ['', '## Bytes por grupo de recurso', '',
+               'Mediana (peor) de bytes por muestra, solo con muestras completas. `teselasMapa` son las '
+               'fuentes externas del mapa: por defecto se bloquean, así que cuentan pedidos, sin bytes. '
+               'Los grupos sin pedidos se omiten (el JSON los conserva en cero).', '',
+               '| Escenario y ruta | Grupo | Pedidos | Red | Caché | Duplicados |',
+               '|---|---|---|---|---|---|']
+    for clave, res in datos.get('resumen', {}).items():
+        for grupo in GRUPOS_RECURSOS:
+            g = (res['bytes'].get('porGrupo') or {}).get(grupo)
+            if not grupo_informa(g):
+                continue
+            lineas.append(
+                f"| {clave} | {grupo} | {g.get('nMediana')} | "
+                f"{_par_b(g.get('bytesRedMediana'), g.get('bytesRedPeor'))} | "
+                f"{g.get('bytesCacheMediana')} B | {g.get('duplicadosMediana')} |")
     incompletas = [m for m in datos.get('muestras', []) if not m.get('completa')]
     lineas += ['', f"## Muestras incompletas ({len(incompletas)})", '']
     if not incompletas:

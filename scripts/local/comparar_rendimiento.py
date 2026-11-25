@@ -134,6 +134,28 @@ def informe_markdown(datos: dict) -> str:
             f"{rb['bytes'].get('bytesRedMediana')}→{rc['bytes'].get('bytesRedMediana')} B | "
             f"{rb['errores'].get('producto')}/{rc['errores'].get('producto')} | "
             f"{rb['nCompletas']}/{rc['nCompletas']} | {'sí' if comp['valida'] else 'NO'} | {'; '.join(comp['motivos']) or '—'} |")
+    lineas += [
+        '', '## Bytes por grupo de recurso', '',
+        'Mediana de bytes por muestra con muestras completas; Δ es el cambio porcentual de la candidata. '
+        '`teselasMapa` (fuentes externas del mapa) se bloquean por defecto: solo cuentan pedidos, sin '
+        'bytes. Los grupos sin pedidos en ambos lados se omiten (el JSON los conserva).', '',
+        '| Escenario | Ruta | Grupo | Red base | Red cand. | Δ | Caché base→cand. | Pedidos base→cand. | Duplicados base→cand. |',
+        '|---|---|---|---|---|---|---|---|---|',
+    ]
+    for clave, comp in comparaciones.items():
+        escenario_txt, ruta = clave.rsplit('/', 1)
+        for grupo in mr.GRUPOS_RECURSOS:
+            gb = (comp['base']['bytes'].get('porGrupo') or {}).get(grupo) or {}
+            gc = (comp['candidata']['bytes'].get('porGrupo') or {}).get(grupo) or {}
+            if not (mr.grupo_informa(gb) or mr.grupo_informa(gc)):
+                continue  # grupo sin pedidos en ningún lado: la fila no dice nada
+            lineas.append(
+                f"| {escenario_txt} | {ruta} | {grupo} | "
+                f"{gb.get('bytesRedMediana')} B | {gc.get('bytesRedMediana')} B | "
+                f"{_delta(gb.get('bytesRedMediana'), gc.get('bytesRedMediana'))} | "
+                f"{gb.get('bytesCacheMediana')}→{gc.get('bytesCacheMediana')} | "
+                f"{gb.get('nMediana')}→{gc.get('nMediana')} | "
+                f"{gb.get('duplicadosMediana')}→{gc.get('duplicadosMediana')} |")
     invalidas = [clave for clave, comp in comparaciones.items() if not comp['valida']]
     lineas += [
         '', '## Validez', '',

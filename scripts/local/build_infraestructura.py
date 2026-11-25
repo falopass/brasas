@@ -1,4 +1,4 @@
-"""Construye `web/data/infraestructura/chile.json` con infraestructura crítica de Chile (MAPA-181).
+"""Construye `web/data/infraestructura/` (índice + teselas de 1°) con infraestructura crítica de Chile (MAPA-181).
 
 Combina dos fuentes con licencia abierta verificada, evitando llamadas directas del
 navegador a Overpass API o servidores estatales lentos:
@@ -14,11 +14,13 @@ Nota sobre MINEDUC: el Directorio de Establecimientos de `datosabiertos.mineduc.
 WMS de `geoportal.cl` no declaran licencia explícita de redistribución; mientras no se
 confirme (criterio de `docs/backlog/hecho/MAPA-181.md`), las escuelas provienen de OSM.
 
-El archivo se guarda en `web/data/infraestructura/chile.json` (carga diferida al encender
-la capa desde zoom >= 10, fuera del precaché de `sw.js`).
+La salida es `web/data/infraestructura/indice.json` (metadatos, licencias, conteos y lista
+de teselas) y `web/data/infraestructura/t/<lat>_<lon>.json` (REND-02): el mapa pide solo las
+teselas del encuadre visible desde zoom >= 10, fuera del precaché de `sw.js`.
 
 Uso:
     python scripts/local/build_infraestructura.py [--pbf RUTA] [--deis RUTA]
+    python scripts/local/build_infraestructura.py --desde chile.json  # solo repartir
 """
 
 from __future__ import annotations
@@ -40,7 +42,8 @@ from shapely.ops import unary_union
 from shapely.prepared import prep
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT_PATH = ROOT / "web" / "data" / "infraestructura" / "chile.json"
+OUT_DIR = ROOT / "web" / "data" / "infraestructura"
+TESELA_DEG = 1  # grados por lado; las claves y el cliente (mapa.js) asumen 1°
 COMUNAS_PATH = ROOT / "web" / "data" / "comunas.geojson"
 
 PBF_URL = "https://download.geofabrik.de/south-america/chile-latest.osm.pbf"
@@ -392,33 +395,93 @@ def build_payload(pbf_path: Path, deis_path: Path | None) -> dict:
     }
 
 
+def _celda(valor: float) -> int:
+    return math.floor(valor)
+
+
+def clave_tesela(lon: float, lat: float) -> str:
+    """Clave de la tesela de 1° que contiene el punto: esquina suroeste `"<lat>_<lon>"`."""
+    return f"{_celda(lat)}_{_celda(lon)}"
+
+
+def particionar(payload: dict) -> tuple[dict, dict[str, dict]]:
+    """Reparte el artefacto nacional en teselas de `TESELA_DEG` grados, sin perder ni alterar nada.
+
+    Cada punto queda exactamente en la tesela de su coordenada. Cada línea se repite en
+    todas las teselas que toca su caja envolvente, con su índice global `i`: toda línea que
+    cruza un encuadre comparte con él alguna tesela de su caja, así que basta con pedir las teselas del
+    encuadre y deduplicar por `i`. El índice conserva metadatos, fuentes, licencias y conteos.
+    """
+    teselas: dict[str, dict] = {}
+
+    def tesela(clave: str) -> dict:
+        return teselas.setdefault(clave, {"rows": [], "lines": []})
+
+    for row in payload["rows"]:
+        tesela(clave_tesela(row[0], row[1]))["rows"].append(row)
+    for i, line in enumerate(payload["lines"]):
+        lons = [c[0] for c in line["coordinates"]]
+        lats = [c[1] for c in line["coordinates"]]
+        for lat in range(_celda(min(lats)), _celda(max(lats)) + 1):
+            for lon in range(_celda(min(lons)), _celda(max(lons)) + 1):
+                tesela(f"{lat}_{lon}")["lines"].append({"i": i, **line})
+
+    indice = {k: v for k, v in payload.items() if k not in ("rows", "lines")}
+    indice["paso"] = TESELA_DEG
+    indice["teselas"] = {
+        clave: {"rows": len(t["rows"]), "lines": len(t["lines"])} for clave, t in sorted(teselas.items())
+    }
+    return indice, teselas
+
+
+def escribir_particion(payload: dict, out_dir: Path) -> tuple[int, int]:
+    """Escribe `indice.json` y `t/<clave>.json`, retirando teselas viejas. Devuelve (bytes, gzip)."""
+    indice, teselas = particionar(payload)
+    carpeta = out_dir / "t"
+    carpeta.mkdir(parents=True, exist_ok=True)
+    for viejo in carpeta.glob("*.json"):
+        if viejo.stem not in teselas:
+            viejo.unlink()
+    total = total_gz = 0
+    for ruta, contenido in [(out_dir / "indice.json", indice)] + [
+        (carpeta / f"{clave}.json", t) for clave, t in teselas.items()
+    ]:
+        raw = json.dumps(contenido, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ruta.write_bytes(raw)
+        total += len(raw)
+        total_gz += len(gzip.compress(raw, compresslevel=9, mtime=0))
+    return total, total_gz
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pbf", type=Path, help="ruta local a chile-latest.osm.pbf")
     parser.add_argument("--deis", type=Path, help="ruta local al CSV de establecimientos DEIS MINSAL")
-    parser.add_argument("--out", type=Path, default=OUT_PATH, help="ruta de salida del JSON")
+    parser.add_argument("--out-dir", type=Path, default=OUT_DIR, help="carpeta de salida del índice y las teselas")
+    parser.add_argument(
+        "--desde", type=Path, help="repartir un artefacto nacional ya construido (formato `chile.json`) sin descargar"
+    )
     args = parser.parse_args(argv)
 
-    pbf_path = args.pbf
-    tmp_dir = None
-    if pbf_path is None:
-        tmp_dir = tempfile.TemporaryDirectory()
-        pbf_path = Path(tmp_dir.name) / "chile-latest.osm.pbf"
-        print(f"Descargando {PBF_URL} ...")
-        urllib.request.urlretrieve(PBF_URL, pbf_path)
+    if args.desde is not None:
+        payload = json.loads(args.desde.read_text(encoding="utf-8"))
+    else:
+        pbf_path = args.pbf
+        tmp_dir = None
+        if pbf_path is None:
+            tmp_dir = tempfile.TemporaryDirectory()
+            pbf_path = Path(tmp_dir.name) / "chile-latest.osm.pbf"
+            print(f"Descargando {PBF_URL} ...")
+            urllib.request.urlretrieve(PBF_URL, pbf_path)
+        try:
+            payload = build_payload(pbf_path, args.deis)
+        finally:
+            if tmp_dir is not None:
+                tmp_dir.cleanup()
 
-    try:
-        payload = build_payload(pbf_path, args.deis)
-    finally:
-        if tmp_dir is not None:
-            tmp_dir.cleanup()
-
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    args.out.write_bytes(raw)
-    gz = len(gzip.compress(raw, compresslevel=9, mtime=0))
+    total, gz = escribir_particion(payload, args.out_dir)
     print("Conteos:", payload["counts"])
-    print(f"Escrito {args.out} ({len(raw):,} B raw / {gz:,} B gzip)")
+    print(f"Escrito {args.out_dir} ({total:,} B raw / {gz:,} B gzip, sumando índice y teselas)")
 
 
 if __name__ == "__main__":
