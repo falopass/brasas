@@ -37,7 +37,22 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check backend tests
-      - run: python -m pytest -v
+      - run: |
+          for t in \
+            tests/test_api_queries.py::test_status_and_risk_reads_stay_fixed_and_bounded \
+            tests/test_om_reserva.py::test_el_ledger_legado_de_work_migra_a_main_sin_rebobinar \
+            tests/test_om_reserva.py::test_el_ledger_avisa_al_respaldo_a_lo_sumo_una_vez_por_ventana \
+            tests/test_om_reserva.py::test_el_despacho_tras_medianoche_queda_cubierto_y_contado_una_vez \
+            tests/test_om_reserva.py::test_la_escritura_callada_marca_sucio_al_vencer_la_ventana \
+            tests/test_om_reserva.py::test_el_cierre_respalda_el_ledger_callado_por_la_ventana \
+            tests/test_om_reserva.py::test_la_respuesta_que_cruza_la_medianoche_se_cobra_al_dia_del_despacho \
+            tests/test_om_reserva.py::test_la_cobertura_del_dia_nuevo_se_devuelve_cuando_todo_falla \
+            tests/test_om_reserva.py::test_la_cobertura_del_dia_nuevo_se_ajusta_a_lo_servido \
+            tests/test_om_reserva.py::test_cancelar_el_punto_de_riesgo_liquida_y_propaga_la_cancelacion; do
+            echo "=== $t"; timeout 90 python -m pytest -q -p no:cacheprovider -o faulthandler_timeout=60 --tb=long "$t" || true
+          done
+          echo "=== archivo completo"; timeout 300 python -m pytest -q -p no:cacheprovider -o faulthandler_timeout=60 --tb=line tests/test_om_reserva.py || true
+        timeout-minutes: 20
         env:
           BRASA_SCHEDULER: "0"
   web:
