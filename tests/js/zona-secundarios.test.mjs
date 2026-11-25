@@ -64,15 +64,15 @@ describe('pedirSecundario · reutilización entre renders', () => {
     assert.equal(pedidos, 2);
   }));
 
-  test('vencida la vigencia se pide de nuevo solo el tipo vencido', () => conReloj(async (reloj) => {
+  test('vencidas las vigencias de diez minutos se repiten solo esos tipos', () => conReloj(async (reloj) => {
     const registro = new Map();
     let pedidos = 0;
     const pedir = () => { pedidos += 1; return Promise.resolve({ ok: 1 }); };
     const pedirTipo = (i) => pedirSecundario(registro, i, lugar(), fila(i, pedir));
     await pedirTipo(0); await pedirTipo(4); await pedirTipo(1);
-    reloj.t = 11 * MIN; // solo el historial venció
+    reloj.t = 11 * MIN; // vencen historial y panorama; el aire sigue vigente
     await pedirTipo(0); await pedirTipo(4); await pedirTipo(1);
-    assert.equal(pedidos, 4);
+    assert.equal(pedidos, 5);
   }));
 
   test('las alertas oficiales se repiden al vencer su vigencia corta (5 min)', () => conReloj(async (reloj) => {
