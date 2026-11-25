@@ -194,7 +194,8 @@ def test_la_espera_de_config_no_bloquea_una_ruta_concurrente(monkeypatch):
         assert len(respuestas_risk) == 2
         sueno.despertar.set()
         await tarea
-        assert [a["path"] for a in app.alcances] == ["/api/config", "/api/risk"]
+        # config llega a la app recién al despertar: después de risk
+        assert [a["path"] for a in app.alcances] == ["/api/risk", "/api/config"]
         assert len(respuestas_config) == 2
         assert sueno.llamadas == [3.0]
 

@@ -440,7 +440,7 @@ async function main() {
   // El índice de comunas no depende del motor (diferido en teléfonos): los buscadores lo necesitan.
   if (window.requestIdleCallback) window.requestIdleCallback(cargarIndiceComunas, { timeout: 4000 });
   else setTimeout(cargarIndiceComunas, 1200);
-  window.addEventListener('online', () => { store.set('online', true); refreshStatus(); if (!configFresca) pedirConfig(); });
+  window.addEventListener('online', () => { store.set('online', true); refreshStatus(); if (!frescaLista) pedirConfig(); });
   window.addEventListener('offline', () => {
     store.set('online', false);
     updateLivePill();
@@ -450,67 +450,49 @@ async function main() {
 
   // Con la configuración guardada la vista monta sin esperarla; la fresca llega después.
   // En Cloudflare el backend puede estar despertando (503): se reintenta antes de rendirse.
+  // REND-02/seg: una sola corrida en vuelo (arranque + evento online); la copia guardada
+  // solo pinta y NUNCA apaga los reintentos (503 y TIMEOUT, pausa creciente).
   const copia = storage.get('config');
   if (copia) store.set('config', copia);
-  // REND-02/seg: una sola corrida de /api/config en vuelo, compartida por el arranque y por
-  // cada regreso de señal (evento online). La copia guardada solo pinta: NUNCA apaga los
-  // reintentos. Pausa creciente con tope; los 503 son el backend despertando.
-  let configEnVuelo = null;
-  let configFresca = false;
-  const pedirConfig = () => (configEnVuelo ??= traerConfig().finally(() => { configEnVuelo = null; }));
-  const traerConfig = async () => {
-    let pausa = 2500;
-    let pintadaDeCache = false;
-    for (let attempt = 0; attempt < 8; attempt++) {
-      if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, pausa));
+  let enVuelo = null; let frescaLista = false;
+  const pedirConfig = () => (enVuelo ??= traer().finally(() => { enVuelo = null; }));
+  const traer = async () => {
+    let pausa = 2500; let deCache = false;
+    for (let i = 0; i < 8; i++) {
+      if (i) await new Promise((r) => setTimeout(r, pausa));
       try {
         const fresca = await api.config();
-        if (fresca.cached_at) {
-          // El service worker sirvió su copia (sin señal ahora): pinta, pero una copia
-          // guardada nunca es configuración fresca —pudo rotar claves—. La corrida sigue
-          // intentando la red.
-          pintadaDeCache = true;
+        if (fresca.cached_at) { // copia del SW (sin señal): pinta, pero no es fresca —pudo rotar claves—
+          deCache = true;
           store.set('config', fresca);
           pausa = Math.min(pausa * 2, 20000);
           continue;
         }
-        // La marca va ANTES del store.set: quien espera la configuración fresca (reportes,
-        // push) la ve en ese mismo evento y no confunde la copia guardada con la vigente.
+        // La marca va ANTES del store.set: quien espera la fresca (reportes, push) la ve en
+        // ese mismo evento y no confunde la copia guardada con la vigente.
         marcarConfigFresca();
         store.set('config', fresca);
         storage.set('config', fresca);
-        configFresca = true;
-        // Con la clave del antibot en mano sale lo que quedó guardado sin señal. flushOutbox
-        // comparte su promesa: aunque el evento online también la dispare, no hay envíos dobles.
-        flushOutbox();
+        frescaLista = true;
+        flushOutbox(); // sale lo guardado sin señal (promesa compartida: sin envíos dobles)
         return;
       } catch (err) {
-        if (err.status === 503) { // el backend está despertando: reintento con pausa creciente
-          $('#live-text').textContent = 'Conectando con BRASA…';
-          $('#live-short').textContent = 'Conectando…';
+        if (err.status === 503 || err.code === 'TIMEOUT') { // backend despertando o red lenta: reintento acotado
+          if (err.status === 503) { $('#live-text').textContent = 'Conectando con BRASA…'; $('#live-short').textContent = 'Conectando…'; }
           pausa = Math.min(pausa * 2, 20000);
           continue;
         }
-        // El servidor no respondió a tiempo (red lenta o rural): reintenta dentro del mismo
-        // ciclo acotado, con la misma pausa creciente y un único aviso al final.
-        if (err.code === 'TIMEOUT') {
-          pausa = Math.min(pausa * 2, 20000);
-          continue;
-        }
-        // Sin red comprobada (la petición no salió, con código OFFLINE, o el navegador se
-        // declaró sin conexión): sin temporizador; el evento online vuelve a lanzar.
-        if (!err.status || navigator.onLine === false) return;
+        if (!err.status || navigator.onLine === false) return; // offline comprobado: el evento online relanza
         toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
         return; // error definitivo del servidor: reintentar no ayuda
       }
     }
-    // Reintentos agotados sin respuesta de red: si al menos hay copia pintada no se molesta
-    // a la persona (ya avisó el «Sin conexión»); el evento online o la próxima apertura reintentan.
-    if (!pintadaDeCache) toast('No se pudo conectar con el servidor de BRASA: el servidor no respondió. Se volverá a intentar al recuperar la conexión.', 'error', 8000);
+    // Agotados los reintentos: con copia pintada no se molesta (ya avisó el «Sin conexión»);
+    // si no hubo nada, un aviso único. El evento online o la próxima apertura reintentan.
+    if (!deCache) toast('No se pudo conectar con el servidor de BRASA: el servidor no respondió. Se volverá a intentar al recuperar la conexión.', 'error', 8000);
   };
-  // REND-02: la configuración nunca bloquea el arranque. Sin copia guardada la petición
-  // corre en segundo plano: las vistas montan sin ella y cada consumidor la espera por su
-  // cuenta (esperarConfig en config.js) o repinta solo lo suyo cuando llega (store.on).
+  // REND-02: la configuración nunca bloquea el arranque; cada consumidor la espera por su
+  // cuenta (esperarConfig) o repinta solo lo suyo cuando llega (store.on).
   pedirConfig();
   // Acciones que usan el mapa fuera de las vistas de mapa: el clic espera al motor y se
   // reintenta; sin él no harían nada.

@@ -50,7 +50,7 @@ def test_lista_canonica_es_lo_que_pide_la_app():
     # Cada URL sale de una plantilla real de api.js: si alguna cambia, la lista deja
     # de coincidir con lo que la app pide.
     plantillas = [
-        (r"config:\s*\(\)\s*=>\s*request\('/api/config'\)", "config"),
+        (r"config:\s*(?:async\s*)?\(\)\s*=>\s*(?:\{[\s\S]{0,120}?)?request\('/api/config'[,)]", "config"),
         (r"status:\s*\(history\)\s*=>\s*request\(`/api/status\$\{history\s*\?", "status"),
         (r"officialFires:\s*\(\)\s*=>\s*request\('/api/official-fires'\)", "officialFires"),
         (r"risk:\s*\(day\)\s*=>\s*request\(`/api/risk\$\{day\s*\?", "risk"),

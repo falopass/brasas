@@ -633,10 +633,13 @@ export function sinReconstruccion(timeline, detecciones) {
   return !detecciones && !timeline?.frames?.length && !timeline?.events?.length;
 }
 
-/** REND-02: la configuración puede llegar con un caso abierto. De ella dependen solo el
- *  botón FIRMS y sus notas, en el caso con y sin reconstrucción: se actualizan en el
- *  lugar, sin reconstruir nada (el cursor, la reproducción y el gráfico quedan como
- *  estaban). Idempotente: puede correr con cada actualización de la configuración. */
+/** Nota y botón del caso sin reconstrucción: dependen de si el servidor tiene la clave FIRMS
+ *  (mientras no se sabe, no se miente ni se muestra el botón). */
+const notaPolar = (c, firms, sinFirms) => html` ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ''}${sinFirms ? ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.' : ''}`;
+const botonPolar = () => html`<button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button>`;
+
+/** REND-02: la configuración puede llegar con un caso abierto; de ella dependen solo el
+ *  botón FIRMS y sus notas, que se actualizan en el lugar, sin reconstruir nada. Idempotente. */
 function aplicarConfigEnCaso(cfg, estado) {
   const host = estado?.container;
   if (!host) return;
@@ -644,18 +647,14 @@ function aplicarConfigEnCaso(cfg, estado) {
   const sinFirms = Boolean(cfg) && !firms;
   const nota = host.querySelector('#polar-nota');
   if (nota) {
-    // Caso sin reconstrucción: la nota dice si el servidor puede sumar FIRMS y el botón
-    // aparece recién con la clave (mientras no se sabe, no miente ni muestra botón).
-    const c = estado.case;
-    nota.innerHTML = String(html` ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ''}${sinFirms ? ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.' : ''}`);
+    nota.innerHTML = String(notaPolar(estado.case, firms, sinFirms));
     const fila = host.querySelector('#polar-fila');
     if (fila) {
       const foco = fila.contains(document.activeElement);
-      fila.innerHTML = String(firms ? html`<button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button>` : '');
+      fila.innerHTML = firms ? String(botonPolar()) : '';
       fila.hidden = !firms;
       fila.querySelector('#polar')?.addEventListener('click', () => loadPolar(true));
-      // El botón enfocado pudo desaparecer (la clave FIRMS se apagó): el foco no cae al
-      // documento — va al botón nuevo o a la nota asociada, que es focusable (tabindex=-1).
+      // El botón enfocado pudo desaparecer: el foco va al botón nuevo o a la nota (tabindex=-1).
       if (foco) reenfocar(fila.querySelector('#polar') || nota, host, nota);
     }
     return;
@@ -666,9 +665,7 @@ function aplicarConfigEnCaso(cfg, estado) {
     const eraFoco = document.activeElement === polar;
     polar.disabled = !firms;
     polar.title = firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor';
-    // Deshabilitar el botón enfocado suelta el foco al documento: se mueve a la nota
-    // asociada (tabindex=-1) o al siguiente control visible.
-    if (eraFoco && polar.disabled) reenfocar(host.querySelector('#polar-hint'), host, polar);
+    if (eraFoco && polar.disabled) reenfocar(host.querySelector('#polar-hint'), host, polar); // el foco no cae al documento
   }
   const hint = host.querySelector('#polar-hint');
   if (hint) hint.textContent = firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : '';
@@ -689,8 +686,8 @@ function renderCase(container, keepIndex = false) {
     ${sinDatos ? html`<p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
     <div class="callout c-nota">
       <b>Este caso no tiene reconstrucción satelital cargada.</b>
-      <span class="small" id="polar-nota" tabindex="-1"> ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ''}${sinFirms ? ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.' : ''}</span>
-      <div class="btn-row" id="polar-fila" ${firms ? '' : 'hidden'}>${firms ? html`<button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button>` : ''}</div>
+      <span class="small" id="polar-nota" tabindex="-1">${notaPolar(c, firms, sinFirms)}</span>
+      <div class="btn-row" id="polar-fila" ${firms ? '' : 'hidden'}>${firms ? botonPolar() : ''}</div>
     </div>` : html`
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
       <div class="player-time"><span><strong id="pl-time"></strong><span class="tiny x-tech" id="pl-utc"></span></span>
@@ -835,8 +832,7 @@ export default {
     mounted = true;
     openSeq++; // invalida cualquier caso que aún esté cargando (por ejemplo, al volver al catálogo)
     // REND-02: la configuración puede llegar con un caso ya abierto; el botón FIRMS y sus
-    // notas se actualizan en el lugar, sin reconstruir el reproductor. La baja previa evita
-    // que un remontaje sin unmount (volver del caso al catálogo) acumule suscripciones.
+    // notas se actualizan en el lugar. La baja previa evita suscripciones acumuladas.
     offConfig?.();
     offConfig = store.on('config', (cfg) => {
       if (!mounted || !S) return;

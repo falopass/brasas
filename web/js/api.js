@@ -115,8 +115,7 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
   try {
     const parsed = await parse(response);
     // Solo lo pide api.config (withMeta): la marca X-Brasa-Cached-At del service worker
-    // distingue la copia guardada de la respuesta de red. Los demás llamadores reciben el
-    // cuerpo, igual que siempre.
+    // distingue la copia guardada de la respuesta de red; los demás reciben el cuerpo igual.
     return withMeta ? { body: parsed, cachedAt: response.headers.get('X-Brasa-Cached-At') } : parsed;
   } catch (err) {
     // Un GET que choca con el límite del borde y pide una espera corta se repite una sola vez.
@@ -142,10 +141,8 @@ export function deviceToken() {
 }
 
 export const api = {
-  // La configuración distingue la respuesta de red de la copia del service worker (REND-02/seg):
-  // api.config devuelve el objeto de siempre más `cached_at` —fecha ISO cuando el SW sirvió su
-  // copia porque no había señal; null cuando vino de la red—. Los demás llamadores leen los
-  // campos de siempre y no cambian.
+  // La configuración distingue la red de la copia del service worker (REND-02/seg): devuelve
+  // el objeto de siempre más `cached_at` —fecha ISO si el SW sirvió su copia; null si es red—.
   config: async () => {
     const { body, cachedAt } = await request('/api/config', { withMeta: true });
     return { ...(body || {}), cached_at: cachedAt };

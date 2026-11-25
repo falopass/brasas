@@ -1833,11 +1833,8 @@ export async function render(container, params) {
   if (relEl && document.activeElement !== relEl) relEl.checked = Boolean(f.reliable);
   container.querySelectorAll('[data-sensor]').forEach((b) => b.setAttribute('aria-pressed', String(f.sensors[b.dataset.sensor] !== false)));
   const exZone = container.querySelector('#ex-zone');
-  // REND-02: la configuración puede llegar con el selector ya enfocado (antes se saltaba la
-  // actualización y quedaba vacío para siempre, y «Consultar archivo satelital» fallaba).
-  // Las opciones se reconcilian en el mismo nodo —el foco no se pierde, el select no se
-  // reemplaza— conservando la zona elegida si sigue existiendo; la clave se normaliza con
-  // los códigos ordenados para no depender del orden en que llegó la configuración.
+  // REND-02: la configuración puede llegar con el selector ya enfocado (antes quedaba vacío
+  // para siempre): las opciones se reconcilian en el mismo nodo, conservando la zona elegida.
   const zonesKey = Object.keys(zones).sort().join(',');
   if (exZone && exZone.dataset?.zonesKey !== zonesKey) {
     const prev = exZone.value;
@@ -2012,9 +2009,8 @@ export default {
     ajustarHojaLectura(container);
     ultimoRefrescoIncidentes = Date.now(); // incidentes y CONAF recién cargados arriba
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
-    // 'config' (REND-02): las zonas de exploración FIRMS y el aviso de GOES llegan con la
-    // configuración, a veces después del primer pintado; el repintado conserva foco y
-    // selección. El forEach evita que un remontaje de la misma vista acumule suscripciones.
+    // 'config' (REND-02): las zonas FIRMS y el aviso de GOES llegan con la configuración, a
+    // veces tras el primer pintado; el forEach evita suscripciones acumuladas al remontar.
     unsubs.forEach((u) => u());
     unsubs = ['observations', 'obsFilter', 'places', 'config'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
     // MAPA-164: la fila de chips y el aviso de fondo sin conexión viven fuera del

@@ -21,11 +21,10 @@ describe('arranque de la configuración en app.js (pineo textual mínimo)', () =
   });
 
   test('pedirConfig marca la configuración fresca ANTES de dejarla en el store', () => {
-    const iMarca = SRC.indexOf('marcarConfigFresca();');
-    const iSet = SRC.indexOf("store.set('config', fresca)");
-    assert.ok(iMarca !== -1, 'falta marcarConfigFresca() en pedirConfig');
-    assert.ok(iSet !== -1, 'falta el store.set de la configuración fresca');
-    assert.ok(iMarca < iSet, 'la marca va antes del store.set: quien espera la fresca la ve en ese evento');
+    // La copia del service worker también se pinta con store.set('config', fresca), pero sin
+    // marca; lo que se fija es que la marca preceda inmediatamente al set de la rama fresca.
+    assert.match(SRC, /marcarConfigFresca\(\);\s*store\.set\('config', fresca\);/,
+      'la marca va justo antes del store.set: quien espera la fresca la ve en ese evento');
   });
 
   test('la marca se pone una sola vez: la siembra de la copia no puede valer por fresca', () => {

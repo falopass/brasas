@@ -160,58 +160,47 @@ async function render(container, token) {
       }
     });
     const follow = container.querySelector('#follow');
-    // Estado del alta (seg/UX): el reintento tras un fallo de AVISOS no repite el POST follow
-    // (el lugar ya quedó guardado en el servidor), solo la activación de los avisos.
-    let followHecho = false;
-    let followCreado = false;
+    // El reintento tras un fallo de AVISOS no repite el POST follow (el lugar ya quedó
+    // guardado): solo la activación de los avisos.
+    let hecho = false;
+    let creado = false;
+    const avisosFallaron = () => {
+      const estado = container.querySelector('#follow-estado');
+      if (estado) { estado.hidden = false; estado.textContent = 'Lugar guardado; avisos no activados'; }
+      follow.disabled = false;
+      follow.textContent = 'Reintentar avisos';
+    };
     follow.addEventListener('click', async () => {
       follow.disabled = true;
-      follow.textContent = followHecho ? 'Activando…' : 'Guardando…';
-      // Safari solo muestra el pedido de permisos con el gesto del clic vivo: se pide ANTES
-      // de cualquier await (el POST de abajo y la configuración pueden demorar, REND-02/UX).
+      follow.textContent = hecho ? 'Activando…' : 'Guardando…';
+      // Safari necesita el gesto vivo: el permiso se pide ANTES de cualquier await.
       const { permiso } = pedirPermisoPush();
       try {
-        if (!followHecho) {
-          const { created } = await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true });
-          followHecho = true;
-          followCreado = created;
+        if (!hecho) {
+          creado = (await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true })).created;
+          hecho = true;
           document.dispatchEvent(new CustomEvent('brasa:places-changed'));
         }
         // La clave pública de push viaja en la configuración FRESCA (la copia guardada solo
-        // pinta: pudo rotar): espera acotada. Sin clave no hay avisos en este teléfono: se
-        // avisa en claro, nunca en silencio.
+        // pinta: pudo rotar): espera acotada. Sin clave no hay avisos: se avisa en claro.
         const key = (await esperarConfig({ fresca: true }))?.push?.public_key;
         let avisos = false;
         if (key) {
           try { await enablePush(key, { permiso }); avisos = true; }
           catch (err) { toast(`${err.message} Pulsa «Reintentar avisos» para volver a intentarlo.`, 'error'); }
         } else {
-          toast('No se pudo activar los avisos en este teléfono: la configuración del servidor no llegó. Cuando pase, pulsa «Reintentar avisos» aquí mismo.', 'error');
+          toast('No se pudo activar los avisos: la configuración del servidor no llegó. Cuando llegue, pulsa «Reintentar avisos».', 'error');
         }
         if (!mounted) return;
         if (avisos) {
           const estado = container.querySelector('#follow-estado');
           if (estado) estado.hidden = true; // el reintento salió: ya no aplica el aviso de fallo
-          follow.textContent = followCreado ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
-        } else {
-          // El lugar quedó guardado, pero los avisos no se activaron: el estado queda visible
-          // junto al botón y el botón es una acción clara. El reintento activa SOLO los
-          // avisos, sin repetir el POST del lugar.
-          const estado = container.querySelector('#follow-estado');
-          if (estado) { estado.hidden = false; estado.textContent = 'Lugar guardado; avisos no activados'; }
-          follow.disabled = false;
-          follow.textContent = 'Reintentar avisos';
-        }
+          follow.textContent = creado ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
+        } else avisosFallaron();
       } catch (err) {
         if (!mounted) return;
-        follow.disabled = false;
-        if (followHecho) {
-          const estado = container.querySelector('#follow-estado');
-          if (estado) { estado.hidden = false; estado.textContent = 'Lugar guardado; avisos no activados'; }
-          follow.textContent = 'Reintentar avisos';
-        } else {
-          follow.textContent = 'Reintentar';
-        }
+        if (hecho) avisosFallaron();
+        else { follow.disabled = false; follow.textContent = 'Reintentar'; }
         toast(err.message, 'error');
       }
     });
