@@ -3,6 +3,7 @@
 Fuente única del trabajo pendiente de BRASA: un archivo por encargo, con su objetivo, archivos y criterio de listo.
 `docs/BACKLOG_MAESTRO.md` queda como roadmap e historia; sus estados ya no se mantienen.
 
+- [REND-02](REND-02.md): rendimiento integral, con medición reproducible en CI antes de optimizar; encargo completo abierto.
 - Al terminar un encargo, en el mismo PR muévelo a `hecho/` (con `git mv`) y nombra su ID en el título del PR.
 - Un encargo nuevo es un archivo `<id>.md` con el frontmatter de los demás (`id`, `repo`, `rama`, `modelo`, `riesgo`, `archivos`, `e2e`).
 - `unificados/`: encargos absorbidos por otro que pedía lo mismo. `descartados/`: encargos o proveedores cuya premisa venció o fueron descartados por licencia/costo (ver [proveedores descartados el 18-11-2026](descartados/proveedores-licencia-costo.md)).

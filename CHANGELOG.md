@@ -4,6 +4,9 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 ## [Unreleased]
 
+**Instrumentación técnica (REND-02, primera tanda)**
+- La revisión visual distingue los documentos nuevos de las transiciones SPA: ya no atribuye el LCP del documento anterior a una ruta por hash. El encargo de rendimiento integral sigue abierto; no se publican ahorros antes de medirlos en CI.
+
 **Para las personas**
 - **Atribuciones oficiales actualizadas para MMA/SINCA, DAP-MINVU y SENAPRED (#985):** «Mi zona», «Riesgo», «Licencias y fuentes» (`licencias.json`) y el agregado comunal de campamentos (`campamentos.json`, ahora en JSON compacto para mantener `web/data/` bajo 4 MB) incorporan las citas oficiales exigidas por el Ministerio del Medio Ambiente de Chile (Carta N° 02853/2026), el Departamento de Asentamientos Precarios (DAP-MINVU, respuesta SIAC/DPH del 4-11-2026, corrigiendo la errata «Sentamientos») y el Oficio N° 2236 de SENAPRED (10-11-2026), manteniendo intacta la lectura compartida de alertas y su enlace directo a `senapred.cl/alertas`.
 - **Capa opcional de infraestructura crítica en el mapa desde zoom 10 (MAPA-181, #984):** en «Capas → Contexto» ahora puedes activar «Infraestructura crítica» (apagada por defecto) para ver cuarteles de bomberos, establecimientos vigentes de salud pública (DEIS · MINSAL, CC0 1.0), escuelas, subestaciones y líneas eléctricas de alta tensión (`>= 110 kV`, OpenStreetMap ODbL) desde un archivo estático versionado sin llamadas externas, con paleta accesible, popups en lenguaje dual y aviso orientativo de que en emergencia rigen las rutas y albergues oficiales.

@@ -6,8 +6,10 @@ y grande, y las páginas estáticas, incluida una pasada en modo impresión a 79
 - textos cortados (desbordados con overflow oculto) o que salen de la pantalla;
 - en impresión, elementos fijos visibles, documentos más anchos que la hoja y secciones sin alto o desbordadas;
 - violaciones de accesibilidad axe-core (WCAG 2.2 AA) con impacto serious/critical.
-Además mide el tiempo de carga de cada página (marca de navegación y LCP) e imprime una
+Además mide la carga de documentos nuevos (marca de navegación y LCP) e imprime una
 tabla informativa con el detalle en <out>/tiempos.json: no influye en el código de salida.
+Las transiciones por hash no heredan estas marcas: su medición de contenido utilizable
+vive en medir_rendimiento.py, no en la espera fija de este recorrido visual.
 Guarda capturas de cada vista en --out. Termina con código 1 si encuentra algún problema.
 
 Regresión visual: con --baseline DIR compara las capturas contra una referencia (≤ 0,5 % de píxeles
@@ -31,7 +33,7 @@ from pathlib import Path
 from PIL import Image, ImageChops
 from playwright.async_api import Route, async_playwright
 
-from tiempos_pagina import LCP_LENTO_MS, resumen as resumen_tiempos, tabla as tabla_tiempos
+from tiempos_pagina import LCP_LENTO_MS, marcas_documento, resumen as resumen_tiempos, tabla as tabla_tiempos
 
 CLIPPED_JS = """() => {
   const out = []; const W = innerWidth;
@@ -1745,9 +1747,12 @@ async def main(url: str, out: Path, baseline: Path | None, update_baseline: Path
                     ),
                 )
                 for route in routes:
+                    origen_anterior = await page.evaluate("performance.timeOrigin")
                     await page.goto(f"{url}/#/{route}")
                     await page.wait_for_timeout(1800)
-                    timing = await page.evaluate(TIMING_JS)
+                    timing = marcas_documento(
+                        await page.evaluate(TIMING_JS), origen_anterior, await page.evaluate("performance.timeOrigin")
+                    )
                     timing.update({"pagina": route, "contexto": f"{route} @{width} {detail}/{text}"})
                     mediciones.append(timing)
                     for item in await page.evaluate(CLIPPED_JS):
