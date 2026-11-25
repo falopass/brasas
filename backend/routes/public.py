@@ -852,15 +852,21 @@ def summarize_air_series(series: dict[str, Any], now: datetime | None = None) ->
 
 
 async def air_for_comuna(
-    svc: Services, comuna: Any, *, prefetched: dict[str, str | None] | None = None, om_day: dict[str, Any] | None = None
+    svc: Services, comuna: Any, *, prefetched: dict[str, str | None] | None = None, room: int | None = None
 ) -> dict[str, Any] | None:
     """MP2,5 pronosticado (CAMS vía Open-Meteo) para hoy y mañana en la comuna; None si falla.
 
     Best-effort: el proveedor de aire nunca debe tumbar ni demorar la ficha de riesgo,
     así que cualquier fallo o espera larga devuelve None y la vista simplemente no la pinta.
+
+    REND-02 t4: el cupo se reserva de forma atómica antes de pedir (`_om_reserve`, la misma
+    guarda del ciclo, con `room` ya descontando reserva y plan cuando la ruta lo trae): dos
+    fichas concurrentes no pueden atravesar el tope juntas y un 429, un JSON roto o una red
+    caída devuelven la reserva en vez de gastar el día. Un timeout o una cancelación con la
+    petición ya despachada conservan lo que salió a la red (la respuesta quedó incierta).
     """
     key = f"air:{comuna.code}"
-    kv = prefetched if prefetched is not None else svc.db.kv_many([key, "open_meteo_day"])
+    kv = prefetched if prefetched is not None else svc.db.kv_many([key])
     cached = _fresh_json(kv.get(key), AIR_TTL_S, require_today=True)
     if cached is not None:
         cached.setdefault("units", AIR_UNITS)  # cachés de antes de #950 no traían unidades
@@ -871,18 +877,20 @@ async def air_for_comuna(
             ),
         )
         return cached
-    day = om_day if om_day is not None else svc._parse_open_meteo_day(kv.get("open_meteo_day"))
-    spent = int(day.get("total") or 0)
-    optional_room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(day)
-    if spent >= optional_room:
+    day = svc._om_reserve("air", 1, room if room is not None else weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    if not day:
         return None
     lon, lat = comuna.center
+    op = svc._om_open_op("air", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    series = None
     try:
         series = await asyncio.wait_for(weather.air_quality(svc.client, lat, lon), AIR_TIMEOUT_S)
     except Exception:  # best-effort: la ficha no depende del proveedor de aire
-        return None
+        series = None
     finally:
-        svc._om_record("air", 1, day=day)  # air_quality siempre pide una sola ubicación
+        svc._om_settle_op("air", weather.end_op(op), day, 1, 1 if series is not None else 0)
+    if series is None:
+        return None
     payload = summarize_air_series(series)
     if payload is None:
         return None
@@ -928,26 +936,35 @@ async def atmosphere_for_point(
     elevation_m: float | None = None,
     *,
     prefetched: dict[str, str | None] | None = None,
-    om_day: dict[str, Any] | None = None,
+    room: int | None = None,
 ) -> dict[str, Any] | None:
     """Déficit de vapor, humedad del suelo, CAPE e índice de Haines de hoy en un punto (RISK-24).
 
     Best-effort como `air_for_comuna`: sin cupo, con un fallo o pasado el tope de espera devuelve
     None y la ficha se sirve igual. La respuesta se guarda en `kv` (`atmos:<cache_key>`) y el
     SSR de la comuna la lee desde ahí sin salir a la red.
+
+    REND-02 t4: mismo reserve/settle atómico del aire. El fallo (429, JSON roto, red caída)
+    libera la reserva en vez de gastar el día como hacía el registro incondicional; un
+    timeout o una cancelación tras despachar conservan lo que salió a la red.
     """
     key = f"atmos:{cache_key}"
     fail_key = f"atmos_fail:{cache_key}"
-    kv = prefetched if prefetched is not None else svc.db.kv_many([key, fail_key, "open_meteo_day"])
+    kv = prefetched if prefetched is not None else svc.db.kv_many([key, fail_key])
     cached = _fresh_json(kv.get(key), ATMOS_TTL_S, require_today=True)
     if cached is not None:
         return cached
     if _fresh_json(kv.get(fail_key), ATMOS_FAIL_TTL_S) is not None:
         return None
-    day = om_day if om_day is not None else svc._parse_open_meteo_day(kv.get("open_meteo_day"))
-    spent = int(day.get("total") or 0)
-    if spent + 2 > weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(day):
+    day = svc._om_reserve("atmos", 2, room if room is not None else weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    if not day:
         return None
+    # La atmósfera pondera >1 crédito fraccional por ubicación (14 variables horarias):
+    # su unidad contable es 2, también en la cobertura del cambio de día (G1).
+    op = svc._om_open_op(
+        "atmos", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending(), unit=2
+    )
+    summary = None
     try:
         rows = await asyncio.wait_for(
             weather.forecast_hourly(
@@ -961,8 +978,18 @@ async def atmosphere_for_point(
     except Exception:  # best-effort: la ficha no depende del proveedor
         summary = None
     finally:
-        # 14 variables horarias (>10): Open-Meteo pondera >1 crédito fraccional; se contabilizan 2 conservadoramente.
-        svc._om_record("atmos", 2, day=day)
+        final = weather.end_op(op)
+        # 14 variables horarias (>10): Open-Meteo pondera >1 crédito fraccional; se
+        # contabilizan 2 conservadoramente por cada ubicación servida.
+        by_day = {otro: 2 * n for otro, n in final.by_day.items()}
+        if final.cut and final.in_flight:
+            # Re-revisión G2: lo cortado se conserva en el día local del despacho, también ×2.
+            for otro, en_vuelo in final.in_flight.items():
+                if en_vuelo > 0:
+                    by_day[otro] = by_day.get(otro, 0) + 2 * en_vuelo
+        elif not by_day and summary is not None:  # respuesta simulada que no dejó conteo: éxito completo
+            by_day = {day: 2}
+        svc._om_settle("atmos", day, 2, by_day, final.extra)
     if summary is None:
         svc.db.kv_set(fail_key, json.dumps({"fetched_at": stamp()}))
         return None
@@ -1002,12 +1029,13 @@ async def risk_comuna(code: int, svc: Services = Depends(services)):
             f"air:{code}",
             f"atmos:comuna:{code}",
             f"atmos_fail:comuna:{code}",
-            "open_meteo_day",
         ]
     )
-    om_day = svc._parse_open_meteo_day(kv.get("open_meteo_day"))
-    air = await air_for_comuna(svc, comuna, prefetched=kv, om_day=om_day)
-    atmos = await atmosphere_for_point(svc, comuna.center[1], comuna.center[0], f"comuna:{code}", prefetched=kv, om_day=om_day)
+    # REND-02 t4: el tope de las tareas opcionales se calcula una vez por ficha (la misma
+    # fórmula que el ciclo) y se pasa a ambas; cada reserva es atómica por su lado.
+    room = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending()
+    air = await air_for_comuna(svc, comuna, prefetched=kv, room=room)
+    atmos = await atmosphere_for_point(svc, comuna.center[1], comuna.center[0], f"comuna:{code}", prefetched=kv, room=room)
     return {
         "comuna": comuna.as_dict(),
         "days": days,
@@ -1078,15 +1106,31 @@ def risk_trend(code: int, weeks: int = Query(1, ge=1, le=8), svc: Services = Dep
 async def current_weather(
     lat: float = Query(..., ge=-90, le=90), lon: float = Query(..., ge=-180, le=180), svc: Services = Depends(services)
 ):
-    """Condiciones actuales MODELADAS (Open-Meteo) en un punto."""
+    """Condiciones actuales MODELADAS (Open-Meteo) en un punto.
+
+    REND-02 t4: la ubicación se reserva de forma atómica antes de la red. Re-revisión S1:
+    la sonda admite como el resto de las tareas opcionales —contra `9.000 − 500 − plan
+    pendiente`— porque la reserva de 500 es del viento de los avisos: una sonda anónima
+    no puede comérsela. Sin cupo degrada igual que cuando el proveedor falla —el mismo
+    502— y la caché reciente sirve sin reservar. Solo lo servido descuenta; un fallo
+    devuelve la reserva y una operación cortada tras despachar conserva lo que salió a la
+    red (en el día del despacho, G2).
+    """
     cache_key = f"weather:{lat:.2f}:{lon:.2f}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
+    day = svc._om_reserve("viento", 1, weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    if not day:
+        raise HTTPException(502, "El proveedor meteorológico no respondió.")
+    op = svc._om_open_op("viento", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    data = None
     try:
         data = await weather.current(svc.client, lat, lon)
     except weather.WeatherError as exc:
         raise HTTPException(502, "El proveedor meteorológico no respondió.") from exc
+    finally:
+        svc._om_settle_op("viento", weather.end_op(op), day, 1, 1 if data is not None else 0)
     payload = {"source": "Open-Meteo", "kind": "modelled_current_weather", "coordinates": [lon, lat], **data}
     svc.db.cache_set(cache_key, payload, 600)
     return payload

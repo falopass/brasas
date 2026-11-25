@@ -20,7 +20,7 @@ from backend import reports as reports_mod
 from backend.geo import haversine_km, territory
 from backend.providers import firms, weather
 from backend.routes.common import admin, clean_text, limiter, moderator_token_hash, services, subscriber
-from backend.services import Services, stamp
+from backend.services import OPEN_METEO_RESERVE, Services, stamp
 
 router = APIRouter(prefix="/api")
 
@@ -642,17 +642,33 @@ async def load_case_polar(request: Request, case_id: str, svc: Services = Depend
 
 @router.get("/cases/{case_id}/weather")
 async def case_weather(case_id: str, svc: Services = Depends(services)):
-    """Reanálisis ERA5 horario en el centro del caso (Open-Meteo Archive)."""
+    """Reanálisis ERA5 horario en el centro del caso (Open-Meteo Archive).
+
+    REND-02 t4: la ubicación se reserva de forma atómica antes de la red. Re-revisión S1:
+    la reconstrucción admite como el resto de las tareas opcionales —contra
+    `9.000 − 500 − plan pendiente`— porque la reserva de 500 es del clima de los avisos:
+    un visitante anónimo no puede comérsela recorriendo casos. Sin cupo degrada igual que
+    cuando el proveedor falla —el mismo 502— y la caché de un año sirve sin reservar.
+    Solo lo servido descuenta; el fallo devuelve la reserva y una operación cortada tras
+    despachar conserva lo que salió a la red (en el día del despacho, G2).
+    """
     case = _case_or_404(case_id)
     cache_key = f"case-weather:{case_id}"
     cached = svc.db.cache_get(cache_key)
     if cached:
         return cached
+    day = svc._om_reserve("casos", 1, weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    if not day:
+        raise HTTPException(502, "No fue posible obtener el reanálisis meteorológico.")
     lon, lat = case["camera"][0], case["camera"][1]
+    op = svc._om_open_op("casos", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    hourly = None
     try:
         hourly = await weather.archive_hourly(svc.client, lat, lon, case["start_utc"][:10], case["end_utc"][:10])
     except weather.WeatherError as exc:
         raise HTTPException(502, "No fue posible obtener el reanálisis meteorológico.") from exc
+    finally:
+        svc._om_settle_op("casos", weather.end_op(op), day, 1, 1 if hourly is not None else 0)
     payload = {
         "source": "ERA5 (Copernicus) vía Open-Meteo Archive",
         "lat": lat,

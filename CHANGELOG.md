@@ -1,13 +1,12 @@
-# Cambios
-
-Formato: lo que nota una persona primero; lo técnico, después. Fechas de despliegue en producción.
-
 ## [Unreleased]
+
+**Contabilidad diaria de Open-Meteo (REND-02, cuarta tanda)**
+- El cupo meteorológico se registra de forma persistente y atómica para que los pedidos simultáneos no pierdan sumas. Las tareas con presupuesto (riesgo, FWI y lluvia) y las consultas de las vistas (tiempo en un punto, clima de un caso, lluvia y terreno, punto de riesgo) reservan su cupo antes de consultar y ceden cuando el día no da, igual que cuando el proveedor falla; la reserva de seguridad de los avisos queda intacta.
+- Lo servido se cobra al día en que salió cada petición: al cruzar la medianoche solo sale a la red lo que el día nuevo puede cubrir. Una petición interrumpida después de salir conserva lo enviado; un fallo de red o un 429 cuesta cero y devuelve lo reservado. Se mantienen los límites diarios y el camino de avisos sin bloqueos nuevos.
 
 **Mi zona reutiliza sus datos secundarios (REND-02, tercera tanda)**
 - Al volver a «Mi zona», el historial, la temporada, la lluvia, la estación, el aire y las alertas oficiales de cada lugar se reutilizan mientras siguen vigentes según su fuente (alertas oficiales 5 min como máximo), en vez de pedirse otra vez. El estado de cada lugar se sigue consultando siempre.
 - «Escuchar» en Mi zona usa la misma lectura en voz alta que el modo vecino (trocea las frases largas para que el navegador no corte la voz). La ficha de comuna y la del incendio comparten el aviso de atmósfera y sequedad en vez de cargar cada una su copia, con el mismo texto.
-
 **Configuración del cliente (REND-02, segunda tanda)**
 - La primera pantalla y la navegación ya no esperan a la configuración del servidor. Las acciones que necesitan claves públicas esperan de forma acotada y muestran un error recuperable si no llegan; los formularios y las vistas reciben la configuración tardía sin borrar su estado. La medición comparada con configuración normal y retrasada sigue pendiente de CI.
 

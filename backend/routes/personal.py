@@ -24,7 +24,7 @@ from backend.notify import telegram, webpush
 from backend.providers import overpass, weather
 from backend.routes.common import clean_text, dmc_by_comuna, dmc_source, limiter, services, subscriber
 from backend.routes.public import official_source, recent_official
-from backend.services import Services, stamp
+from backend.services import OPEN_METEO_RESERVE, Services, stamp
 
 router = APIRouter(prefix="/api")
 CHILE_TZ = ZoneInfo("America/Santiago")
@@ -240,16 +240,32 @@ async def risk_point_at(svc: Services, lat: float, lon: float) -> dict | None:
     así lugares cercanos comparten la petición a Open-Meteo en vez de repetirla. Si el
     proveedor falla o el pronóstico no alcanza para clasificar hoy, devuelve None: el
     resumen sigue igual que antes y la vista no muestra nada nuevo.
+
+    REND-02 t4: el gasto se registra con contabilidad local y solo tras el éxito (una
+    ubicación); el acierto de caché y el fallo registran cero. La ubicación se reserva de
+    forma atómica antes de la red, contra el tope de las tareas opcionales (el plan de
+    riesgo, FWI y lluvia manda): sin cupo el punto cede como cuando el proveedor falla
+    —None, y el resumen sigue igual— sin gastar nada.
     """
     cache_key = f"riskpoint:{round(lat, 1)}:{round(lon, 1)}"
     cached = svc.db.cache_get(cache_key)
     if cached is not None:
         return cached or None
+    day = svc._om_reserve("risk_point", 1, weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    if not day:
+        return None
+    op = svc._om_open_op("risk_point", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending())
+    point = None  # se lee en el `finally`: una cancelación antes del try no puede dejarla sin definir
     try:
         hourly = (await weather.forecast_hourly(svc.client, [(round(lat, 1), round(lon, 1))], days=2))[0]
         point = risk_mod.point_today(hourly)
     except weather.WeatherError:
         point = None
+    finally:
+        # Re-revisión (cuarta ronda): con point ya inicializada, una cancelación u otra
+        # excepción antes de la respuesta liquida igual —la op cortada conserva lo
+        # despachado— y la excepción original se propaga intacta.
+        svc._om_settle_op("risk_point", weather.end_op(op), day, 1, 1 if point is not None else 0)
     result = {**point, "computed_at": stamp()} if point else {}
     svc.db.cache_set(cache_key, result, RISK_POINT_TTL_S if point else RISK_POINT_RETRY_S)
     return result or None
