@@ -139,30 +139,20 @@ function onLugar(feature) {
 }
 const STALE_MIN = 30;
 
-/* OFI-30: temporada 2025-26 por comuna, una sola lectura por sesión (mismo patrón perezoso
-   que exposure.js): promesa cacheada que nunca lanza; sin el archivo no se pinta nada. */
+/* OFI-30/MAPA-182: JSON local, una sola lectura por sesión (mismo patrón perezoso que
+   exposure.js): promesa cacheada que nunca lanza; un fallo se reintenta la próxima vez. */
 let panoramas = new Map();
 let cambiosVisto = storage.get('zona:cambios:visto', null);
-let temporadaPromise = null;
-export function loadTemporada() {
-  return (temporadaPromise ??= fetch('/web/data/temporada-2526.json')
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .catch(() => { temporadaPromise = null; return null; }));
-}
+const cargaJson = (ruta) => { let prom = null; return () => (prom ??= fetch(ruta)
+  .then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .catch(() => { prom = null; return null; })); };
+export const loadTemporada = cargaJson('/web/data/temporada-2526.json');
 
 let cicatricesData = null;
-let cicatricesPromise = null;
-export function loadCicatrices() {
-  return (cicatricesPromise ??= fetch('/web/data/scars.json')
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .catch(() => { cicatricesPromise = null; return null; }));
-}
+export const loadCicatrices = cargaJson('/web/data/scars.json');
 
 export function recoveryNote(years) {
   const n = Math.max(0, Number(years) || 0);
@@ -298,10 +288,7 @@ function speak(text, btn) {
 // El texto de «urgente» según la causa del resumen; sin causa (resúmenes antiguos) queda el del satélite.
 export function statusText(status, cause = {}) {
   if (status !== 'urgente') return STATUS[status].text;
-  if (cause.conaf && cause.satelite) return URGENT_TEXT.ambos;
-  if (cause.conaf) return URGENT_TEXT.conaf;
-  if (cause.persona_mayor) return URGENT_TEXT.persona_mayor;
-  return URGENT_TEXT.satelite;
+  return URGENT_TEXT[cause.conaf && cause.satelite ? 'ambos' : cause.conaf ? 'conaf' : cause.persona_mayor ? 'persona_mayor' : 'satelite'];
 }
 
 /* Modo emergencia (lugar en «urgente»): solo lo esencial — cercanía, autoridad, qué hacer
@@ -361,11 +348,17 @@ function legend() {
     <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
 
+/* Día de la semana corto y «día mes» de las tiras de días (opciones de fmtDay). */
+const diaCorto = (d, wd = 'short') => fmtDay(d, { weekday: wd, day: undefined, month: undefined });
+const diaMes = (d) => fmtDay(d, { weekday: undefined, day: 'numeric', month: undefined });
+/* Nota discreta al pie de un bloque de la tarjeta (clase y margen compartidos). */
+const notaPie = (inner) => html`<p class="tiny muted" style="margin-top:8px">${inner}</p>`;
+
 export function dayStrip(days) {
-  if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico de los próximos días aparecerá pronto.</p>`;
+  if (!days?.length) return notaPie(html`El pronóstico de los próximos días aparecerá pronto.`);
   return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
     <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.${d.boton_rojo_hours ? ' CONAF pronostica Botón Rojo: condiciones favorables para incendios (no significa que haya fuego).' : ''}">
-      <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
+      <b>${diaCorto(d.date)}</b>${diaMes(d.date)}
       <i class="${RISK[d.level]?.cls || ''}"></i>${d.boton_rojo_hours ? html`<em class="br-mark" aria-hidden="true">${dual(html`<span class="br-dot"></span>CONAF`, 'BR')}</em>` : ''}<span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}${d.boton_rojo_hours ? '. CONAF pronostica Botón Rojo: condiciones favorables para incendios, no significa que haya fuego' : ''}</span></button>`)}</div>`;
 }
 
@@ -411,7 +404,7 @@ function historyBlock(history) {
    Solo en la tarjeta de Mi zona: el modo vecino usa placeBody directamente, no esta tarjeta. */
 function riskPointLine(point) {
   if (!point?.level) return '';
-  return html`<p class="tiny muted" style="margin-top:8px">En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}</p>`;
+  return notaPie(html`En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}`);
 }
 
 /* OFI-30/VEC-02: lo que informó CONAF de la temporada pasada en la comuna del lugar.
@@ -440,7 +433,7 @@ function weekBlock(week) {
   const withHeat = days.filter((d) => d.n > 0).length;
   const emptyLabel = week.enough_data ? 'sin calor confiable' : 'sin datos';
   const nearest = week.nearest_km == null ? ''
-    : `el más cercano a ${fmtNum(week.nearest_km, week.nearest_km < 3 ? 1 : 0)} km${week.nearest_at ? `, el ${fmtDay(chileYmd(week.nearest_at), { weekday: 'long', day: undefined, month: undefined })}` : ''}`;
+    : `el más cercano a ${fmtNum(week.nearest_km, week.nearest_km < 3 ? 1 : 0)} km${week.nearest_at ? `, el ${diaCorto(chileYmd(week.nearest_at), 'long')}` : ''}`;
   const sentence = !week.enough_data ? 'sin datos suficientes para la semana'
     : !withHeat ? 'ningún día con calor confiable cerca'
     : `${withHeat === 1 ? 'un día' : `${withHeat} días`} con calor cerca${nearest ? `; ${nearest}` : ''}`;
@@ -449,8 +442,8 @@ function weekBlock(week) {
     <div class="day-strip" style="margin-top:6px">${days.map((d) => html`<span class="day-cell" role="img"
       aria-label="${fmtDay(d.date, { weekday: 'long', day: 'numeric', month: 'long' })}: ${d.n === 0 ? emptyLabel : d.n === 1 ? '1 detección de calor' : `${d.n} detecciones de calor`}">
       <i aria-hidden="true" style="--h:${d.n ? Math.max(12, Math.round((d.n / max) * 100)) : 0}%;--rc:var(--accent)"></i>
-      <b aria-hidden="true">${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>
-      <span aria-hidden="true">${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}</span></span>`)}</div>
+      <b aria-hidden="true">${diaCorto(d.date)}</b>
+      <span aria-hidden="true">${diaMes(d.date)}</span></span>`)}</div>
   </div>`;
 }
 
@@ -509,7 +502,7 @@ function panoramaLine(place, panorama) {
     ? `CONAF informó ${fmtNum(c.n)} ${c.n === 1 ? 'incendio' : 'incendios'} en tu comuna esta temporada (${fmtNum(c.ha, 1)} ha)`
     : 'CONAF todavía no informa incendios en tu comuna esta temporada';
   const prev = d.previous;
-  return html`<p class="tiny muted" style="margin-top:8px">${line}${d.boton_rojo_days ? ` · ${fmtNum(d.boton_rojo_days)} ${d.boton_rojo_days === 1 ? 'día' : 'días'} de Botón Rojo` : ''}${prev ? ` · la temporada anterior: ${fmtNum(prev.n)} (${fmtNum(prev.ha, 1)} ha)` : ''}. (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a></p>`;
+  return notaPie(html`${line}${d.boton_rojo_days ? ` · ${fmtNum(d.boton_rojo_days)} ${d.boton_rojo_days === 1 ? 'día' : 'días'} de Botón Rojo` : ''}${prev ? ` · la temporada anterior: ${fmtNum(prev.n)} (${fmtNum(prev.ha, 1)} ha)` : ''}. (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a>`);
 }
 
 /* UX-62: «Qué hacer hoy» según el nivel del día, cada acción con su fuente. */
@@ -527,28 +520,31 @@ export function protectedAreaLine(pa) {
   const area = Array.isArray(pa) ? pa[0] : pa;
   if (!area?.name) return '';
   const km = fmtNum(area.distance_km, 1);
-  return html`<p class="tiny muted" style="margin-top:8px">${dual(
+  return notaPie(html`${dual(
     area.inside
       ? `Dentro de un área protegida del Estado: ${area.name}.`
       : `A ${km} km de un área protegida: ${area.name}.`,
     `${area.category || 'Área protegida'} del SNASPE${area.region ? ` · ${area.region}` : ''} · ${area.inside ? 'dentro del polígono' : `borde a ${km} km`}.`,
-  )} Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.</p>`;
+  )} Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.`);
 }
 
-/* AGUA-02/04: pendiente y huella a ≤ 5 km. Sin cicatriz no se habla de ladera quemada.
- * El contrato nuevo trae `relieve` y `cicatriz`; los campos planos quedan como respaldo
- * mientras convivan ambas formas en el servidor. */
+/* Contrato nuevo (`relieve`/`cicatriz`) con respaldo en los campos planos antiguos. */
+const pendienteDe = (t) => t?.relieve?.slope_max_deg ?? t?.slope_deg;
+const cicatrizHaDe = (t) => t?.cicatriz?.ha ?? t?.scar_ha;
+
+/* AGUA-02/04: pendiente y huella a ≤ 5 km. Sin cicatriz no se habla de ladera quemada. */
 function terrenoNota(t) {
   if (!t) return '';
-  const pendiente = t.relieve?.slope_max_deg ?? t.slope_deg;
-  const cicatrizHa = t.cicatriz?.ha ?? t.scar_ha;
-  const pendienteConocida = pendiente != null && Number.isFinite(Number(pendiente));
+  const pendiente = pendienteDe(t);
+  const cicatrizHa = cicatrizHaDe(t);
+  const p = Number(pendiente);
+  const pendienteConocida = pendiente != null && Number.isFinite(p);
   const huella = Number(cicatrizHa) > 0;
   const deConaf = t.cicatriz?.fuente === 'conaf';
   const cuidado = huella && (t.nivel === 'alto' || t.nivel === 'moderado');
   if (!pendienteConocida && !huella) return '';
-  const grados = pendienteConocida ? fmtNum(Number(pendiente), 0) : '';
-  const gradosFinos = pendienteConocida ? fmtNum(Number(pendiente), 1) : '';
+  const grados = pendienteConocida ? fmtNum(p, 0) : '';
+  const gradosFinos = pendienteConocida ? fmtNum(p, 1) : '';
   const ha = huella ? fmtNum(Number(cicatrizHa)) : '';
   const hechos = [
     pendienteConocida ? `pendiente ~${grados}°` : '',
@@ -592,8 +588,8 @@ export function avisoAluvion(data) {
   const t = data?.terreno;
   const s = data?.senal;
   if (t?.aviso !== true) return '';
-  const pendienteMax = t?.relieve?.slope_max_deg ?? t?.slope_deg;
-  const cicatrizHa = t?.cicatriz?.ha ?? t?.scar_ha;
+  const pendienteMax = pendienteDe(t);
+  const cicatrizHa = cicatrizHaDe(t);
   const detalleTec = [
     Number.isFinite(s?.mm_3h) ? `${fmtNum(s.mm_3h, 1)} mm en 3 h` : '',
     s?.isoterma_m != null ? `isoterma 0 °C a ${fmtNum(s.isoterma_m)} m` : '',
@@ -621,16 +617,18 @@ function lluviaDetalle(data, dmc = null) {
   const cuando = s.ventana ? ` el ${fmtDateTime(s.ventana)}` : '';
   const iso = s.isoterma_m != null ? ` La isoterma 0 °C está a ${fmtNum(s.isoterma_m)} m.` : '';
   const cierre = t?.aviso === true ? '' : ' Es un dato del pronóstico. BRASA te avisa si se pronostica lluvia intensa sobre una zona quemada cercana; las alertas oficiales de aluvión las emite SENAPRED.';
-  return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
+  return notaPie(html`${s.intensa
     ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
     hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}${terrenoNota(t)}${cierre}
-    Fuente: ${data.source || 'Open-Meteo'}.${lluviaMedidaDmc(dmc)}</p>`;
+    Fuente: ${data.source || 'Open-Meteo'}.${lluviaMedidaDmc(dmc)}`);
 }
+
+const lluviaTxt = (s) => s.rain_24h_mm != null ? `lluvia 24 h ${fmtNum(s.rain_24h_mm, 1)} mm` : `lluvia 6 h ${fmtNum(s.rain_6h_mm, 1)} mm`;
 
 function lluviaMedidaDmc(d) {
   const s = d?.station;
   if (!s?.observed_at || (s.rain_24h_mm == null && s.rain_6h_mm == null)) return '';
-  const r = s.rain_24h_mm != null ? `lluvia 24 h ${fmtNum(s.rain_24h_mm,1)} mm` : `lluvia 6 h ${fmtNum(s.rain_6h_mm,1)} mm`;
+  const r = lluviaTxt(s);
   const u = d?.source_url;
   return html` Medido en ${s.name} (${fmtNum(s.distance_km,1)} km): ${r} a las ${fmtTime(s.observed_at)} — ${u ? html`<a href="${u}" target="_blank" rel="noopener">DMC</a>` : 'DMC'}.`;
 }
@@ -643,12 +641,11 @@ export function stationLine(data) {
   if (s.temperature_c != null) partes.push(`${fmtNum(s.temperature_c, 1)} °C`);
   if (s.humidity != null) partes.push(`humedad ${fmtNum(s.humidity)} %`);
   if (s.wind_kmh != null) partes.push(`viento ${fmtNum(s.wind_kmh)} km/h${s.wind_deg != null ? ` ${windFrom(s.wind_deg)}` : ''}`);
-  if (s.rain_24h_mm != null) partes.push(`lluvia 24 h ${fmtNum(s.rain_24h_mm,1)} mm`);
-  else if (s.rain_6h_mm != null) partes.push(`lluvia 6 h ${fmtNum(s.rain_6h_mm,1)} mm`);
+  if (s.rain_24h_mm != null || s.rain_6h_mm != null) partes.push(lluviaTxt(s));
   if (s.pressure_hpa != null) partes.push(`presión ${fmtNum(s.pressure_hpa,0)} hPa`);
   if (!partes.length) return '';
   const fuente = data.source_url ? html`<a href="${data.source_url}" target="_blank" rel="noopener">${data.source || 'DMC'} ↗</a>` : data.source || 'DMC';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km,1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.</p>`;
+  return notaPie(html`<b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km,1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.`);
 }
 
 const AIR_SIGNAL = {
@@ -674,26 +671,11 @@ export function airLine(data) {
   const fin = (v) => typeof v === 'number' && Number.isFinite(v);
   if (!a || !fin(a.pm25) || !a.observed_at) return '';
   const pm25Txt = fmtNum(a.pm25, 1);
-  let pm25Part;
-  if (a.pm25_period === 'horario') {
-    const pm2524 = fin(a.pm25_24h) && fmtNum(a.pm25_24h, 1) !== pm25Txt
-      ? ` (media 24 h: ${fmtNum(a.pm25_24h, 1)} µg/m³)`
-      : '';
-    pm25Part = dual(
-      `partículas finas (MP2,5) ${pm25Txt} µg/m³ en la última hora`,
-      `MP2,5 horario ${pm25Txt} µg/m³${pm2524}`,
-    );
-  } else if (a.pm25_period === '24h') {
-    pm25Part = dual(
-      `partículas finas (MP2,5) ${pm25Txt} µg/m³ (promedio de 24 h)`,
-      `MP2,5 media 24 h ${pm25Txt} µg/m³`,
-    );
-  } else {
-    pm25Part = dual(
-      `partículas finas (MP2,5) ${pm25Txt} µg/m³`,
-      `MP2,5 ${pm25Txt} µg/m³`,
-    );
-  }
+  const media24 = fin(a.pm25_24h) && fmtNum(a.pm25_24h, 1) !== pm25Txt ? ` (media 24 h: ${fmtNum(a.pm25_24h, 1)} µg/m³)` : '';
+  const pm25Part = a.pm25_period === 'horario'
+    ? dual(`partículas finas (MP2,5) ${pm25Txt} µg/m³ en la última hora`, `MP2,5 horario ${pm25Txt} µg/m³${media24}`)
+    : dual(`partículas finas (MP2,5) ${pm25Txt} µg/m³${a.pm25_period === '24h' ? ' (promedio de 24 h)' : ''}`,
+      `MP2,5 ${a.pm25_period === '24h' ? 'media 24 h ' : ''}${pm25Txt} µg/m³`);
   const extrasSencillo = [];
   const extrasTecnico = [];
   if (fin(a.pm10)) {
@@ -720,7 +702,7 @@ export function airLine(data) {
     icapPart = html`, ${dual(`calidad del aire (promedio de 24 h): ${a.status}`, a.status)}`;
   }
   const respaldo = a.source_mode === 'snapshot' ? ' (respaldo reciente)' : '';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a>${respaldo}. Medición preliminar del Ministerio del Medio Ambiente de Chile, no un pronóstico.</p>`;
+  return notaPie(html`<b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a>${respaldo}. Medición preliminar del Ministerio del Medio Ambiente de Chile, no un pronóstico.`);
 }
 
 /* OFI-04: «La autoridad informa» — las alertas vigentes de SENAPRED que nombran a la
@@ -739,7 +721,8 @@ export function autoridadBlock(data) {
 export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial, revisado, cicatrices) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
-  const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
+  const diasBr = summary?.risk_days?.some((d) => d.boton_rojo_hours) || false;
+  const botonRojo = place.comuna && diasBr;
   // MZ-09: con el lugar en «urgente» o «aviso», lo que dice SENAPRED va arriba, junto al
   // estado; si no, va justo después de las acciones para que «Qué hago» quepa en la
   // primera pantalla (tres alertas regionales miden unos 400 px en 390 px de ancho).
@@ -764,8 +747,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       airLine(air),
     ]),
     historyBlock(history),
-    summary?.risk_days?.some((d) => d.boton_rojo_hours)
-      ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
+    diasBr ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
     seasonBlock(place, temporada),
     cicatricesBlock(place, cicatrices),
   ].map(String).join('');
@@ -885,6 +867,10 @@ function applySummary(place, result, ahora = Date.now()) {
   summariesAt.delete(place.id);
 }
 
+/* El resumen de un lugar: un fallo se trata como «sin datos», nunca como error sin capturar. */
+const pedirResumen = (id) => api.placeSummary(id).catch(() => ({ error: true }));
+const marcarConsulta = () => (lastSummaryAt = new Date().toISOString());
+
 /* MZ-06: vuelve a pedir SOLO el resumen de cada lugar (nunca historial, panorama, lluvia,
  * estación, aire ni alertas oficiales) y repinta sin perder la posición del panel. El modo
  * emergencia se reevalúa solo: paint() ya decide. `mine` congela el turno para que un
@@ -893,8 +879,8 @@ async function refreshSummaries(container) {
   const places = store.get('places') || [];
   if (!places.length) { repinta(container); return; }
   const mine = turno;
-  lastSummaryAt = new Date().toISOString();
-  const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))));
+  marcarConsulta();
+  const results = await Promise.all(places.map((p) => pedirResumen(p.id)));
   if (!mounted || mine !== turno) return;
   const ahora = Date.now();
   places.forEach((p, i) => applySummary(p, results[i], ahora));
@@ -918,9 +904,9 @@ async function retrySummary(container, place, btn) {
   btn.disabled = true;
   btn.textContent = 'Consultando…';
   const mine = turno;
-  const summary = await api.placeSummary(place.id).catch(() => ({ error: true }));
+  const summary = await pedirResumen(place.id);
   if (!mounted || mine !== turno) return;
-  lastSummaryAt = new Date().toISOString();
+  marcarConsulta();
   applySummary(place, summary);
   if (summary.error) toast('Sigue sin poder consultar este lugar.', 'error');
   repinta(container);
@@ -983,11 +969,11 @@ async function render(container) {
   const [me, avisos, ...sums] = await Promise.all([
     api.me().catch(() => null),
     api.alerts().then((r) => r.alerts).catch(() => []),
-    ...places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))),
+    ...places.map((p) => pedirResumen(p.id)),
   ]);
   if (mine !== turno || !mounted) return;
   meData = me; inboxData = avisos;
-  lastSummaryAt = new Date().toISOString();
+  marcarConsulta();
   const ahora = Date.now();
   const ids = new Set(places.map((p) => p.id));
   // Antes del primer pintado: lo visible de un lugar editado se retira enseguida.
@@ -1050,6 +1036,9 @@ function syncTitulo(container) {
   if (el.textContent !== t) el.textContent = t;
 }
 
+/* Cascarón común del héroe de la portada: brasero con su tono y el contenido interior. */
+const heroZona = (cls, tone, inner) => html`<div class="ember-hero brasero${cls ? ` ${cls}` : ''}" role="status"><span class="brasa-marco">${emberSvg({ tone })}</span><div>${inner}</div></div>`;
+
 function paint(container) {
   const places = store.get('places') || [];
   const config = store.get('config');
@@ -1088,23 +1077,19 @@ function paint(container) {
   const nFailed = places.filter((p) => !summaries.get(p.id) || summaries.get(p.id).error).length;
   const hero = places.length
     ? worst && (worst !== 'tranquilo' || !nFailed)
-    ? html`<div class="ember-hero brasero st-${worst}" role="status"><span class="brasa-marco">${emberSvg({ tone: worst })}</span>
-        <div><div class="hero-label">${STATUS[worst].title}</div>
+    ? heroZona(`st-${worst}`, worst, html`<div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${statusText(worst, worstSummary?.cause)}.</small>
         ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
           <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button>
-          ${synth ? html`<button class="btn btn-sm btn-speak" id="hero-listen" type="button" aria-label="Escuchar el estado y qué hacer ahora">Escuchar</button>` : ''}</div>` : ''}</div></div>`
-    : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
-        <div><div class="hero-label">No pudimos consultar ${nFailed === places.length ? 'tus lugares' : `${nFailed === 1 ? 'uno' : nFailed} de tus lugares`} ahora</div>
-        <small>Puede ser tu conexión o el servidor; no significa que no haya fuego cerca. Si ves humo o llamas, llama al 130 o al 132.</small></div></div>`
+          ${synth ? html`<button class="btn btn-sm btn-speak" id="hero-listen" type="button" aria-label="Escuchar el estado y qué hacer ahora">Escuchar</button>` : ''}</div>` : ''}`)
+    : heroZona('', 'tranquilo', html`<div class="hero-label">No pudimos consultar ${nFailed === places.length ? 'tus lugares' : `${nFailed === 1 ? 'uno' : nFailed} de tus lugares`} ahora</div>
+        <small>Puede ser tu conexión o el servidor; no significa que no haya fuego cerca. Si ves humo o llamas, llama al 130 o al 132.</small>`)
     : !store.get('status')?.last_ingest_at
-    ? html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
-        <div><div class="hero-label">Aún no llegan datos de los satélites</div>
-        <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small></div></div>`
-    : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}</span>
-        <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
+    ? heroZona('', 'tranquilo', html`<div class="hero-label">Aún no llegan datos de los satélites</div>
+        <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small>`)
+    : heroZona('', chileHot ? 'brasa' : 'tranquilo', html`<div class="hero-figure tabular">${fmtNum(chileHot)}</div>
         <small>${dual(chileHot === 1 ? 'punto de calor confiable visto hoy por satélites en Chile' : 'puntos de calor confiables vistos hoy por satélites en Chile',
-          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza nominal, media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
+          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza nominal, media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small>`);
   // Datos atrasados: «no vemos fuego» deja de significar «no hay fuego».
   const lastIngest = store.get('status')?.last_ingest_at;
   const staleMin = lastIngest ? minutesSince(lastIngest) : 0;
@@ -1221,16 +1206,14 @@ function paint(container) {
  * faltantes (tope 78 %) para dejar el mapa visible arriba. */
 let hojaPortadaRaf = 0;
 export function ajustarHojaPortada(container, { activo = () => mounted } = {}) {
-  if (!activo() || window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'half') return;
-  if ((store.get('places') || []).length) return;
-  const boton = container?.querySelector('#add-place');
-  const tabbar = document.querySelector('.tabbar');
-  if (!boton || !tabbar) return;
+  // Condiciones que pueden cambiar entre el agendado y el cuadro: se revalidan dentro.
+  const vigente = () => activo() && window.innerWidth < 900
+    && document.documentElement.dataset.sheet === 'half' && !(store.get('places') || []).length;
+  if (!vigente() || !container?.querySelector('#add-place') || !document.querySelector('.tabbar')) return;
   if (hojaPortadaRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(hojaPortadaRaf);
   const aplicar = () => {
     hojaPortadaRaf = 0;
-    if (!activo() || window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'half') return;
-    if ((store.get('places') || []).length) return;
+    if (!vigente()) return;
     const b = container?.querySelector('#add-place');
     const t = document.querySelector('.tabbar');
     if (!b || !t) return;
@@ -1255,12 +1238,7 @@ function frame() {
   fitBbox([Math.min(...lons) - pad, Math.min(...lats) - pad, Math.max(...lons) + pad, Math.max(...lats) + pad], 60);
 }
 
-let offPlaces = null;
-let offStatus = null;
-let offObs = null;
-let offText = null;
-let offDetail = null;
-let offConfig = null;
+const subs = {}; // desuscripciones de store.on (se sueltan todas en unmount)
 let onVis = null;
 let onResize = null;
 export default {
@@ -1293,19 +1271,20 @@ export default {
     else onReady(aplicar);
     // Las suscripciones van antes del primer render: la portada se monta sin esperar las
     // cargas iniciales y nada de lo que llegue durante el montaje queda sin repintado.
-    offPlaces = store.on('places', async () => { if (mounted) { syncTitulo(container); await render(container); frame(); } });
+    subs.places = store.on('places', async () => { if (mounted) { syncTitulo(container); await render(container); frame(); } });
     // PERF-13: antes de que lleguen los lugares estos repintados pintarían el estado
     // vacío; el primer render real lo dispara el evento 'places' del arranque.
-    offStatus = store.on('status', () => { if (mounted && store.get('placesReady')) repinta(container); });
+    subs.status = store.on('status', () => { if (mounted && store.get('placesReady')) repinta(container); });
     // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
     // 'observations' solo cambia con un corte nuevo) y al volver a la app.
-    offObs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
-    offText = store.on('text', () => ajustarHojaPortada(container));
-    offDetail = store.on('detail', () => ajustarHojaPortada(container));
+    subs.obs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
+    const ajustarHoja = () => ajustarHojaPortada(container);
+    subs.text = store.on('text', ajustarHoja);
+    subs.detail = store.on('detail', ajustarHoja);
     // REND-02: la nota de FIRMS del pie depende de la configuración, que puede llegar
     // después del primer pintado; el repintado es el mismo que ya usan los demás datos.
-    offConfig?.();
-    offConfig = store.on('config', () => { if (mounted && store.get('placesReady')) repinta(container); });
+    subs.config?.();
+    subs.config = store.on('config', () => { if (mounted && store.get('placesReady')) repinta(container); });
     onVis = () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'volver'); };
     onResize = () => ajustarHojaPortada(container);
     document.addEventListener('visibilitychange', onVis);
@@ -1319,16 +1298,7 @@ export default {
     turno += 1;
     stopSpeak();
     document.documentElement.classList.remove('emergency-on');
-    offPlaces?.();
-    offStatus?.();
-    offObs?.();
-    offObs = null;
-    offText?.();
-    offText = null;
-    offDetail?.();
-    offDetail = null;
-    offConfig?.();
-    offConfig = null;
+    for (const k in subs) { subs[k]?.(); delete subs[k]; }
     if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
     if (onResize) { window.removeEventListener('resize', onResize); onResize = null; }
     soltarToques.forEach((s) => s());
