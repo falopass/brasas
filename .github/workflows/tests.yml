@@ -37,7 +37,7 @@ jobs:
           cache: pip
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m ruff check backend tests
-      - run: python -m pytest -q
+      - run: python -m pytest -v
         env:
           BRASA_SCHEDULER: "0"
   web:
