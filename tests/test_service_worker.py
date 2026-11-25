@@ -116,7 +116,9 @@ def test_recursos_de_lite_y_lista_cacheables():
 # 2026-11-19: +1 — /web/ayudas.html (PROD-08: la guía de ayudas tras el incendio
 # se enlaza desde la vista diferida «Más» y abre sin señal como preguntas.html).
 # 2026-11-25: +1 — /web/js/config.js (REND-02: espera compartida no bloqueante).
-SHELL_ENTRADAS_HOY = 89
+# 2026-11-26: +1 — /web/js/atmosfera.js (REND-02: el aviso de atmósfera que comparten
+# la ficha de comuna y la del incendio, antes copiado en ambas vistas).
+SHELL_ENTRADAS_HOY = 90
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():

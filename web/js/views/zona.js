@@ -6,16 +6,18 @@ import { planMunicipal } from '../municipios.js';
 import { cerrarPopup, OFFICIAL_LABEL, popupFoco, popupOficial } from '../popup.js';
 import { AGE_BINS, EMPTY_FC, fitBbox, fly, getMap, onReady, pointsGeoJSON, registrarToque, setData, show } from '../map.js';
 import { store } from '../store.js';
+import { speak, stopSpeak, synth } from '../speak.js';
 import { alertChannels, closeModal, collapseSheet, openModal, phonesHtml, placeForm } from '../ui.js';
 import { debeRefrescar } from '../pildora.js';
 import { $, ago, blobFromRing, botonRojoIcs, cardWord, download, haversineKm, minutesSince, dual, emberSvg, fmtDateTime, fmtDay, fmtTime, fmtNum, html, keepPlace, parseUTC, radarSvg, raw, RISK, ringIsSquare, seedFrom, storage, riskChip, toast, TZ, windFrom, windWords } from '../util.js';
 import { INCIDENT, incidentInfo } from '../incidente.js';
 
 // «Urgente» dice por qué lo es: calor satelital, un incendio de CONAF, una persona mayor o una mezcla.
+const CALOR_ZONA = 'Un satélite vio calor dentro de tu zona de aviso';
 export const URGENT_TEXT = {
-  satelite: 'Un satélite vio calor dentro de tu zona de aviso: muy cerca o con el viento hacia ti',
+  satelite: `${CALOR_ZONA}: muy cerca o con el viento hacia ti`,
   conaf: 'CONAF informa un incendio activo dentro de tu zona de aviso',
-  persona_mayor: 'Un satélite vio calor dentro de tu zona de aviso y ahí vive alguien que necesita más tiempo para salir',
+  persona_mayor: `${CALOR_ZONA} y ahí vive alguien que necesita más tiempo para salir`,
   ambos: 'CONAF informa un incendio y un satélite vio calor dentro de tu zona de aviso',
 };
 
@@ -56,6 +58,8 @@ let emActive = false;
 /* MZ-06/MZ-07: hora de la última consulta buena por lugar y de la última tanda; `turno`
  * descarta renders viejos para que no pisen al nuevo. */
 let turno = 0;
+/* ¿Sigue vigente un render? `mounted` y el turno intacto: unmount o un render nuevo lo invalida. */
+const turnoActivo = (mine) => mounted && mine === turno;
 const summariesAt = new Map();
 let lastSummaryAt = null;
 const RESUMEN_BUENO_MS = 30 * 60000;
@@ -63,6 +67,21 @@ const RESUMEN_BUENO_MS = 30 * 60000;
 // (VIIRS > mancha GOES, CONAF > foco; PRIORIDAD_TOQUE en capas.js).
 let soltarToques = [];
 const FOCO_CAPAS = ['detections', 'goes-pixels'];
+
+/* Ayudas breves de toda la vista: kilómetros legibles (1 decimal bajo 3 km), plurales,
+ * enlaces externos con target/rel fijos, toques, lugares guardados y eventos del documento. */
+const km1 = (d) => fmtNum(d, d < 3 ? 1 : 0);
+const plural = (n, uno, varios = `${uno}s`) => (n === 1 ? uno : varios);
+const enl = (href, txt, cls) => html`<a${cls ? ` class="${cls}"` : ''} href="${href}" target="_blank" rel="noopener">${txt}</a>`;
+const alClick = (el, fn) => el?.addEventListener('click', fn);
+const alSel = (body, sel, fn) => alClick(body.querySelector(sel), fn);
+const lugares = () => store.get('places') || [];
+const obsDe = (id) => (store.get('observations') || []).find((o) => o.id === id);
+const confiable = (o) => o.inside_radius && o.reliable;
+const moverHoja = (d) => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: d }));
+const avisoPlaces = () => document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+/* Zoom que enfoca un lugar guardado: radios grandes abarcan más terreno. */
+const zoomLugar = (p) => (p.radius_km > 15 ? 9.5 : 10.5);
 
 /** Ancla de la ficha: la coordenada exacta del punto o el toque. */
 const puntoDe = (feature, lngLat) => (feature?.geometry?.type === 'Point' ? feature.geometry.coordinates : lngLat);
@@ -73,7 +92,7 @@ function onFoco(feature, lngLat) {
   const map = getMap();
   const props = feature?.properties;
   if (props?.count > 1) { map.easeTo({ center: lngLat, zoom: Math.min(map.getZoom() + 1.8, 10.5), duration: 600 }); return; }
-  const obs = (store.get('observations') || []).find((o) => o.id === props?.id);
+  const obs = obsDe(props?.id);
   if (obs) popupFoco(obs, puntoDe(feature, lngLat));
 }
 
@@ -93,7 +112,7 @@ function contextoMapa() {
   // «label» alimenta la etiqueta official-labels (MAPA-163), enlazada a `official`.
   setData('official', pointsGeoJSON([...conafCerca.values()], (f) => ({ id: f.id, status: f.status,
     label: `CONAF: «${f.name || 'Sin nombre'}» · ${f.status_raw || OFFICIAL_LABEL[f.status]}` })));
-  const places = store.get('places') || [];
+  const places = lugares();
   setData('incident-rings', pointsGeoJSON(
     incidentes.filter((i) => ANILLO_STATUS.has(i.status)
       && places.some((p) => haversineKm(p.lat, p.lon, i.lat, i.lon) <= p.radius_km * 2)),
@@ -132,37 +151,27 @@ function onLugar(feature) {
   const id = feature?.properties?.id;
   const card = id ? document.querySelector(`#view [data-place="${CSS.escape(id)}"]`) : null;
   if (!card) return;
-  if (store.get('sheet') === 'peek') document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' }));
+  if (store.get('sheet') === 'peek') moverHoja('half');
   card.scrollIntoView({ block: 'start' });
   card.classList.add('flash');
   setTimeout(() => card.classList.remove('flash'), 1800);
 }
 const STALE_MIN = 30;
 
-/* OFI-30: temporada 2025-26 por comuna, una sola lectura por sesión (mismo patrón perezoso
-   que exposure.js): promesa cacheada que nunca lanza; sin el archivo no se pinta nada. */
+/* OFI-30/MAPA-182: JSON local, una sola lectura por sesión (mismo patrón perezoso que
+   exposure.js): promesa cacheada que nunca lanza; un fallo se reintenta la próxima vez. */
 let panoramas = new Map();
 let cambiosVisto = storage.get('zona:cambios:visto', null);
-let temporadaPromise = null;
-export function loadTemporada() {
-  return (temporadaPromise ??= fetch('/web/data/temporada-2526.json')
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .catch(() => { temporadaPromise = null; return null; }));
-}
+const cargaJson = (ruta) => { let prom = null; return () => (prom ??= fetch(ruta)
+  .then((r) => {
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+  })
+  .catch(() => { prom = null; return null; })); };
+export const loadTemporada = cargaJson('/web/data/temporada-2526.json');
 
 let cicatricesData = null;
-let cicatricesPromise = null;
-export function loadCicatrices() {
-  return (cicatricesPromise ??= fetch('/web/data/scars.json')
-    .then((r) => {
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
-    })
-    .catch(() => { cicatricesPromise = null; return null; }));
-}
+export const loadCicatrices = cargaJson('/web/data/scars.json');
 
 export function recoveryNote(years) {
   const n = Math.max(0, Number(years) || 0);
@@ -236,20 +245,20 @@ export function cicatricesCerca(place, catalog, now = new Date()) {
 export function cicatricesBlock(place, catalog) {
   const cerca = cicatricesCerca(place, catalog);
   if (!cerca.length) return '';
-  return html`<details class="fold"><summary>Suelo quemado en años anteriores</summary><div>
+  return pliegue('Suelo quemado en años anteriores', html`<div>
     <ul class="list">${cerca.map((s) => {
       const real = s.perimeter === 'real';
       const tipo = real ? 'perímetro histórico simplificado' : 'dibujo orientativo';
       const lejos = s.distance_km === 0
         ? `este lugar cae dentro del ${tipo}`
-        : `a ${fmtNum(s.distance_km, s.distance_km < 3 ? 1 : 0)} km del ${tipo}`;
+        : `a ${km1(s.distance_km)} km del ${tipo}`;
       return html`<li><span class="grow small">${dual(
         `Temporada ${s.season} (${s.year}): se quemaron unas ${fmtNum(s.burned_ha, 0)} hectáreas, ${lejos}. ${s.recovery_note}`,
         `${s.year}, temporada ${s.season}: ${fmtNum(s.burned_ha, 1)} ha, ${fmtNum(s.distance_km, 1)} km (${tipo}). ${s.recovery_note}`
       )}</span></li>`;
     })}</ul>
-    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a> (<a href="https://deigeprif.com/" target="_blank" rel="noopener">GEPRIF</a> / IDE Minagri), grandes incendios de 2014 a 2024. Cada entrada indica si usa un perímetro simplificado o un dibujo orientativo (no es el perímetro oficial metro a metro ni un aviso de hoy).</p>
-  </div></details>`;
+    <p class="tiny muted">Fuente: <a href="https://www.conaf.cl/" target="_blank" rel="noopener">CONAF</a> (${enl('https://deigeprif.com/', 'GEPRIF')} / IDE Minagri), grandes incendios de 2014 a 2024. Cada entrada indica si usa un perímetro simplificado o un dibujo orientativo (no es el perímetro oficial metro a metro ni un aviso de hoy).</p>
+  </div>`);
 }
 
 // Primero en la lista cuando en el lugar vive alguien que necesita ayuda para salir.
@@ -261,53 +270,20 @@ export const OLDER_GUIDANCE = {
 };
 export const guidanceFor = (status, olderAdult) => (olderAdult ? [OLDER_GUIDANCE[status], ...GUIDANCE[status]] : GUIDANCE[status]);
 
-/* Lectura en voz alta (UX-02, mismo patrón que web/js/lite.js): «Escuchar» solo se crea
-   cuando hay speechSynthesis; un solo «leyendo» a la vez y la etiqueta pasa a «Detener». */
-const synth = 'speechSynthesis' in window ? window.speechSynthesis : null;
-let speakingBtn = null;
-
-function setSpeaking(btn, on) {
-  btn.classList.toggle('speaking', on);
-  btn.textContent = on ? 'Detener' : 'Escuchar';
-}
-
-function stopSpeak() {
-  if (speakingBtn) { setSpeaking(speakingBtn, false); speakingBtn = null; }
-  synth?.cancel();
-}
-
-function speak(text, btn) {
-  if (speakingBtn === btn) { stopSpeak(); return; }
-  if (speakingBtn) setSpeaking(speakingBtn, false);
-  synth.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'es-CL';
-  const voices = synth.getVoices?.() || [];
-  u.voice = voices.find((v) => v.lang === 'es-CL')
-    || voices.find((v) => v.lang === 'es-419')
-    || voices.find((v) => (v.lang || '').toLowerCase().startsWith('es'))
-    || null;
-  speakingBtn = btn;
-  setSpeaking(btn, true);
-  u.onend = u.onerror = () => {
-    if (speakingBtn === btn) { speakingBtn = null; setSpeaking(btn, false); }
-  };
-  synth.speak(u);
-}
+/* Lectura en voz alta (UX-02): el mismo módulo que el modo vecino (speak.js). «Escuchar»
+   solo se crea cuando hay speechSynthesis, un solo «leyendo» a la vez y la etiqueta pasa
+   a «Detener»; speak.js además trocea las frases largas (Chrome corta solas a ~15 s). */
 
 // El texto de «urgente» según la causa del resumen; sin causa (resúmenes antiguos) queda el del satélite.
 export function statusText(status, cause = {}) {
   if (status !== 'urgente') return STATUS[status].text;
-  if (cause.conaf && cause.satelite) return URGENT_TEXT.ambos;
-  if (cause.conaf) return URGENT_TEXT.conaf;
-  if (cause.persona_mayor) return URGENT_TEXT.persona_mayor;
-  return URGENT_TEXT.satelite;
+  return URGENT_TEXT[cause.conaf && cause.satelite ? 'ambos' : cause.conaf ? 'conaf' : cause.persona_mayor ? 'persona_mayor' : 'satelite'];
 }
 
 /* Modo emergencia (lugar en «urgente»): solo lo esencial — cercanía, autoridad, qué hacer
  * y a quién llamar; se puede volver a la vista completa. */
 const EM_KEY = 'em-dismissed';
-const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find((o) => o.inside_radius && o.reliable)?.id || ''}:${s.official?.[0]?.id || ''}`).join('|');
+const emKey = (urgent) => urgent.map(([p, s]) => `${p.id}:${s.nearby?.find(confiable)?.id || ''}:${s.official?.[0]?.id || ''}`).join('|');
 const emDismissed = (key) => { try { return sessionStorage.getItem(EM_KEY) === key; } catch { return false; } };
 
 /** Lo que informa la autoridad (CONAF) sobre un incendio cercano; lo usan el modo emergencia y el modo vecino.
@@ -315,25 +291,26 @@ const emDismissed = (key) => { try { return sessionStorage.getItem(EM_KEY) === k
 export function officialBlock(official, source, comuna) {
   return html`<div class="em-official"><b>¿Qué dijo la autoridad?</b>
     ${official ? html`<span><b>CONAF:</b> incendio «${official.name || 'sin nombre'}», ${(official.status_raw || 'informado').toLowerCase()}, desde las ${fmtTime(official.started_at)} (${ago(official.started_at)}).</span>` : ''}
-    ${official && source ? html`<span class="tiny">Fuente: <a href="${source.url}" target="_blank" rel="noopener">${source.name}</a>.</span>` : ''}
+    ${official && source ? html`<span class="tiny">Fuente: ${enl(source.url, source.name)}.</span>` : ''}
     <span>Las órdenes de evacuación las da SENAPRED: llegan como mensaje de emergencia al celular, por radio y en su sitio. BRASA no las reemplaza.</span>
-    <a class="btn btn-sm btn-block" href="https://senapred.cl/alertas/" target="_blank" rel="noopener">Consulta la alerta oficial vigente${comuna ? ` para ${comuna}` : ''} en SENAPRED ↗</a></div>`;
+    ${enl('https://senapred.cl/alertas/', `Consulta la alerta oficial vigente${comuna ? ` para ${comuna}` : ''} en SENAPRED ↗`, 'btn btn-sm btn-block')}</div>`;
 }
 
 function emergencyView(urgent) {
   const [place, summary] = urgent[0];
-  const near = summary.nearby.filter((o) => o.inside_radius && o.reliable);
+  const near = summary.nearby.filter(confiable);
   const n = near[0];
   const latest = near.map((o) => o.observed_at).sort().pop();
   const ww = windWords(summary.wind?.direction);
   const upwind = near.some((o) => o.upwind);
   const official = (summary.official || []).find((f) => f.inside_radius && f.status !== 'extinguido');
+  const otros = urgent.length - 1;
   return html`<section class="emergency" aria-labelledby="em-title">
-    <div class="em-top"><div class="em-head"><span class="status-badge st-urgente">Urgente</span><span class="small">${latest ? `último calor ${ago(latest)}` : ''}</span></div>
-    <h1 class="em-title" id="em-title">${official ? `CONAF informa un incendio a ${fmtNum(official.distance_km, official.distance_km < 3 ? 1 : 0)} km de «${place.name}»`
-      : n ? `Posible fuego a ${fmtNum(n.distance_km, n.distance_km < 3 ? 1 : 0)} km de «${place.name}»` : `Calor cerca de «${place.name}»`}</h1>
+    <div class="em-top"><div class="em-head">${badge('urgente', 'Urgente')}<span class="small">${latest ? `último calor ${ago(latest)}` : ''}</span></div>
+    <h1 class="em-title" id="em-title">${official ? `CONAF informa un incendio a ${km1(official.distance_km)} km de «${place.name}»`
+      : n ? `Posible fuego a ${km1(n.distance_km)} km de «${place.name}»` : `Calor cerca de «${place.name}»`}</h1>
     <p class="em-sub">${official ? `Hacia el ${cardWord(official.direction)}.` : n ? `Hacia el ${cardWord(n.direction)}.` : ''} ${upwind && ww ? `El viento va hacia tu lugar (${fmtNum(summary.wind.speed)} km/h).` : ''}
-      ${urgent.length > 1 ? `También hay calor cerca de ${urgent.length - 1 === 1 ? 'otro de tus lugares' : `otros ${urgent.length - 1} de tus lugares`}.` : ''}</p>
+      ${urgent.length > 1 ? `También hay calor cerca de ${otros === 1 ? 'otro de tus lugares' : `otros ${otros} de tus lugares`}.` : ''}</p>
     <div class="em-calls"><a class="btn btn-call btn-lg" href="tel:132">Bomberos · 132</a><a class="btn btn-lg" href="tel:130">CONAF · 130</a></div></div>
     ${officialBlock(official, summary.official_source, place.comuna?.name)}
     <ol class="steps em-steps">
@@ -344,7 +321,7 @@ function emergencyView(urgent) {
       <li><b>No regreses</b> aunque ya no veas llamas: espera a que la autoridad lo permita.</li>
     </ol>
     <div class="btn-row">${n?.incident_id ? html`<a class="btn" href="#/incendio/${n.incident_id}">Qué han visto los satélites</a>` : ''}
-      ${synth ? html`<button class="btn btn-speak" id="em-listen" type="button" aria-label="Escuchar qué pasa y qué hacer">Escuchar</button>` : ''}
+      ${escucha('em-listen', 'btn btn-speak', 'Escuchar qué pasa y qué hacer')}
       <button class="btn btn-ghost" id="em-full">Ver todo (mapa, clima y detalles)</button></div>
     <p class="tiny muted">BRASA es un proyecto ciudadano y no es una alerta oficial. Un satélite vio calor dentro de tu zona de aviso; puede ser un incendio, una quema o una industria.</p>
   </section>`;
@@ -361,17 +338,31 @@ function legend() {
     <div class="legend-note esencial">Calor no siempre es incendio. Toca un punto para ver su detalle.</div>`);
 }
 
+/* Día de la semana corto y «día mes» de las tiras de días (opciones de fmtDay). */
+const diaCorto = (d, wd = 'short') => fmtDay(d, { weekday: wd, day: undefined, month: undefined });
+const diaMes = (d) => fmtDay(d, { weekday: undefined, day: 'numeric', month: undefined });
+/* Nota discreta al pie de un bloque de la tarjeta (clase y margen compartidos). */
+const notaPie = (inner) => html`<p class="tiny muted" style="margin-top:8px">${inner}</p>`;
+/* Piezas que se repiten en toda la vista: el pliegue plegable, la placa de estado y el
+ * botón «Escuchar» (solo con speechSynthesis; la etiqueta pasa a «Detener» al leer). */
+const pliegue = (t, i) => html`<details class="fold"><summary>${t}</summary>${i}</details>`;
+const badge = (st, txt) => html`<span class="status-badge st-${st}">${txt}</span>`;
+const escucha = (id, cls, label) => (synth ? html`<button class="${cls}" id="${id}" type="button" aria-label="${label}">Escuchar</button>` : '');
+
 export function dayStrip(days) {
-  if (!days?.length) return html`<p class="tiny muted" style="margin-top:8px">El pronóstico de los próximos días aparecerá pronto.</p>`;
-  return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => html`
-    <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}. ${RISK[d.level]?.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.${d.boton_rojo_hours ? ' CONAF pronostica Botón Rojo: condiciones favorables para incendios (no significa que haya fuego).' : ''}">
-      <b>${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}
-      <i class="${RISK[d.level]?.cls || ''}"></i>${d.boton_rojo_hours ? html`<em class="br-mark" aria-hidden="true">${dual(html`<span class="br-dot"></span>CONAF`, 'BR')}</em>` : ''}<span class="sr-only">Peligro ${(RISK[d.level]?.label || 'sin dato').toLowerCase()}${d.boton_rojo_hours ? '. CONAF pronostica Botón Rojo: condiciones favorables para incendios, no significa que haya fuego' : ''}</span></button>`)}</div>`;
+  if (!days?.length) return notaPie(html`El pronóstico de los próximos días aparecerá pronto.`);
+  return html`<div class="day-strip" aria-label="Peligro de incendio por el clima, próximos 7 días">${days.slice(0, 7).map((d) => {
+    const r = RISK[d.level] || {};
+    return html`
+    <button type="button" class="day-cell" data-daytip="${fmtDay(d.date)}: peligro ${(r.label || 'sin dato').toLowerCase()}. ${r.plain || ''} Hasta ${fmtNum(d.tmax)} °C, humedad ${fmtNum(d.rhmin)} %, viento ${fmtNum(d.windmax)} km/h.${d.boton_rojo_hours ? ' CONAF pronostica Botón Rojo: condiciones favorables para incendios (no significa que haya fuego).' : ''}">
+      <b>${diaCorto(d.date)}</b>${diaMes(d.date)}
+      <i class="${r.cls || ''}"></i>${d.boton_rojo_hours ? html`<em class="br-mark" aria-hidden="true">${dual(html`<span class="br-dot"></span>CONAF`, 'BR')}</em>` : ''}<span class="sr-only">Peligro ${(r.label || 'sin dato').toLowerCase()}${d.boton_rojo_hours ? '. CONAF pronostica Botón Rojo: condiciones favorables para incendios, no significa que haya fuego' : ''}</span></button>`;
+  })}</div>`;
 }
 
 /** Radar y datos clave de un lugar (los usa la tarjeta propia y la vista compartida con la familia). */
 export function placeBody(place, summary) {
-  const near = summary?.nearby?.filter((o) => o.inside_radius && o.reliable) || [];
+  const near = summary?.nearby?.filter(confiable) || [];
   const nearest = near[0] || summary?.nearby?.[0];
   const today = summary?.risk_days?.[0];
   const wind = summary?.wind;
@@ -382,7 +373,7 @@ export function placeBody(place, summary) {
         <figcaption class="tiny">${dual(`Anillo: ${fmtNum(place.radius_km)} km`, `Anillos ${fmtNum(place.radius_km)} y ${fmtNum(place.radius_km * 2)} km`)}</figcaption></figure>
       <ul class="place-facts">
         <li>${nearest
-          ? html`<b>${near.length ? `${near.length === 1 ? 'Un punto' : `${near.length} puntos`} de calor` : 'Calor'}</b> ${dual(`a ${fmtNum(nearest.distance_km, nearest.distance_km < 3 ? 1 : 0)} km, hacia el ${cardWord(nearest.direction)}`, `más cercano a ${fmtNum(nearest.distance_km, 1)} km, rumbo ${nearest.bearing_deg}° (${nearest.direction}) · ${nearest.satellite || nearest.sensor}`)}<span class="muted"> · ${ago(nearest.observed_at)}</span>`
+          ? html`<b>${near.length ? `${near.length === 1 ? 'Un punto' : `${near.length} puntos`} de calor` : 'Calor'}</b> ${dual(`a ${km1(nearest.distance_km)} km, hacia el ${cardWord(nearest.direction)}`, `más cercano a ${fmtNum(nearest.distance_km, 1)} km, rumbo ${nearest.bearing_deg}° (${nearest.direction}) · ${nearest.satellite || nearest.sensor}`)}<span class="muted"> · ${ago(nearest.observed_at)}</span>`
           : summary?.data_as_of
           ? html`<b>Sin calor</b> a menos de ${fmtNum(place.radius_km * 2)} km <span class="muted">en 2 días</span>`
           : html`<b>Sin hora de actualización</b> <span class="muted">· no se sabe si hubo calor cerca en 2 días</span>`}</li>
@@ -397,21 +388,21 @@ export function placeBody(place, summary) {
 function historyBlock(history) {
   const items = history?.incidents || [];
   if (!items.length) return '';
-  return html`<details class="fold"><summary>${dual(`Los últimos ${history.days} días cerca de este lugar`,
-    `Incidentes a menos de 2× el radio, últimos ${history.days} días (sin fuentes de calor fijas)`)}</summary>
+  return pliegue(dual(`Los últimos ${history.days} días cerca de este lugar`,
+    `Incidentes a menos de 2× el radio, últimos ${history.days} días (sin fuentes de calor fijas)`), html`
     <ul class="list">${items.map((h) => {
       const info = INCIDENT[h.status] || INCIDENT.anomalia;
-      return html`<li><a class="row-btn" href="#/incendio/${h.id}"><span class="status-badge st-${info.tone}">${info.short}</span>
-        <span class="grow small">${dual(`a ${fmtNum(h.distance_km, h.distance_km < 3 ? 1 : 0)} km${h.comuna ? `, ${h.comuna}` : ''} · ${ago(h.last_seen_at)}`,
-          `${fmtNum(h.distance_km, 1)} km · ${h.n_obs === 1 ? '1 detección' : `${h.n_obs} detecciones`} · ${fmtDateTime(h.last_seen_at)}`)}</span></a></li>`;
-    })}</ul></details>`;
+      return html`<li><a class="row-btn" href="#/incendio/${h.id}">${badge(info.tone, info.short)}
+        <span class="grow small">${dual(`a ${km1(h.distance_km)} km${h.comuna ? `, ${h.comuna}` : ''} · ${ago(h.last_seen_at)}`,
+          `${fmtNum(h.distance_km, 1)} km · ${h.n_obs} ${plural(h.n_obs, 'detección', 'detecciones')} · ${fmtDateTime(h.last_seen_at)}`)}</span></a></li>`;
+    })}</ul>`);
 }
 
 /* RISK-05: el 30-30-30 calculado en el punto exacto del lugar (no el del centro de la comuna).
    Solo en la tarjeta de Mi zona: el modo vecino usa placeBody directamente, no esta tarjeta. */
 function riskPointLine(point) {
   if (!point?.level) return '';
-  return html`<p class="tiny muted" style="margin-top:8px">En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}</p>`;
+  return notaPie(html`En tu punto exacto: ${riskChip(point.level)} — ${point.reasons?.[0] || ''}`);
 }
 
 /* OFI-30/VEC-02: lo que informó CONAF de la temporada pasada en la comuna del lugar.
@@ -424,10 +415,10 @@ function seasonBlock(place, temporada) {
   const mes = mesPalabras(row.mes_peak);
   const simple = row.incendios === 0
     ? 'CONAF no informó incendios en tu comuna esa temporada.'
-    : `Entre septiembre de 2025 y mayo de 2026 CONAF informó ${fmtNum(row.incendios)} ${row.incendios === 1 ? 'incendio' : 'incendios'} en tu comuna; quemaron ${fmtNum(row.hectareas, 1)} ha.${mes ? ` El mes con más superficie fue ${mes}` : ''}${row.max_ha ? ` y el mayor incendio llegó a ${fmtNum(row.max_ha, 1)} ha` : ''}.`;
-  return html`<details class="fold"><summary>La temporada pasada en tu comuna</summary><div>
+    : `Entre septiembre de 2025 y mayo de 2026 CONAF informó ${fmtNum(row.incendios)} ${plural(row.incendios, 'incendio')} en tu comuna; quemaron ${fmtNum(row.hectareas, 1)} ha.${mes ? ` El mes con más superficie fue ${mes}` : ''}${row.max_ha ? ` y el mayor incendio llegó a ${fmtNum(row.max_ha, 1)} ha` : ''}.`;
+  return pliegue('La temporada pasada en tu comuna', html`<div>
     <p class="small">${dual(simple, `temporada ${temporada.temporada || '—'} · ${row.name} (${row.code}) · ${fmtNum(row.incendios)} incendios · ${fmtNum(row.hectareas, 1)} ha`)}</p>
-    <p class="tiny muted">Fuente: <a href="${temporada.source}" target="_blank" rel="noopener">CONAF, reporte público de incendios (GEPRIF)</a>${temporada.fetched_at ? ` · datos al ${fmtDateTime(temporada.fetched_at)}` : ''}. Dato histórico; no es el pronóstico de hoy.</p></div></details>`;
+    <p class="tiny muted">Fuente: ${enl(temporada.source, 'CONAF, reporte público de incendios (GEPRIF)')}${temporada.fetched_at ? ` · datos al ${fmtDateTime(temporada.fetched_at)}` : ''}. Dato histórico; no es el pronóstico de hoy.</p></div>`);
 }
 
 /* «La semana»: los últimos siete días del lugar, en una frase y una barra por día.
@@ -440,17 +431,17 @@ function weekBlock(week) {
   const withHeat = days.filter((d) => d.n > 0).length;
   const emptyLabel = week.enough_data ? 'sin calor confiable' : 'sin datos';
   const nearest = week.nearest_km == null ? ''
-    : `el más cercano a ${fmtNum(week.nearest_km, week.nearest_km < 3 ? 1 : 0)} km${week.nearest_at ? `, el ${fmtDay(chileYmd(week.nearest_at), { weekday: 'long', day: undefined, month: undefined })}` : ''}`;
+    : `el más cercano a ${km1(week.nearest_km)} km${week.nearest_at ? `, el ${diaCorto(chileYmd(week.nearest_at), 'long')}` : ''}`;
   const sentence = !week.enough_data ? 'sin datos suficientes para la semana'
     : !withHeat ? 'ningún día con calor confiable cerca'
     : `${withHeat === 1 ? 'un día' : `${withHeat} días`} con calor cerca${nearest ? `; ${nearest}` : ''}`;
   return html`<div style="margin-top:12px">
     <p class="tiny"><b>La semana</b> · ${sentence}.</p>
     <div class="day-strip" style="margin-top:6px">${days.map((d) => html`<span class="day-cell" role="img"
-      aria-label="${fmtDay(d.date, { weekday: 'long', day: 'numeric', month: 'long' })}: ${d.n === 0 ? emptyLabel : d.n === 1 ? '1 detección de calor' : `${d.n} detecciones de calor`}">
+      aria-label="${fmtDay(d.date, { weekday: 'long', day: 'numeric', month: 'long' })}: ${d.n === 0 ? emptyLabel : `${d.n} ${plural(d.n, 'detección de calor', 'detecciones de calor')}`}">
       <i aria-hidden="true" style="--h:${d.n ? Math.max(12, Math.round((d.n / max) * 100)) : 0}%;--rc:var(--accent)"></i>
-      <b aria-hidden="true">${fmtDay(d.date, { weekday: 'short', day: undefined, month: undefined })}</b>
-      <span aria-hidden="true">${fmtDay(d.date, { weekday: undefined, day: 'numeric', month: undefined })}</span></span>`)}</div>
+      <b aria-hidden="true">${diaCorto(d.date)}</b>
+      <span aria-hidden="true">${diaMes(d.date)}</span></span>`)}</div>
   </div>`;
 }
 
@@ -485,8 +476,8 @@ export function weekLine(trend) {
   if (!rows.length || rows.every((r) => r.change === 'sin_anterior')) return '';
   const s = trend.summary || {};
   const partes = [];
-  if (s.sube) partes.push(`subió en ${fmtNum(s.sube)} ${s.sube === 1 ? 'día' : 'días'}`);
-  if (s.baja) partes.push(`bajó en ${fmtNum(s.baja)} ${s.baja === 1 ? 'día' : 'días'}`);
+  if (s.sube) partes.push(`subió en ${fmtNum(s.sube)} ${plural(s.sube, 'día')}`);
+  if (s.baja) partes.push(`bajó en ${fmtNum(s.baja)} ${plural(s.baja, 'día')}`);
   if (!partes.length) return 'El pronóstico de tu comuna se mantiene igual que hace una semana.';
   return `El pronóstico de tu comuna para los próximos días ${partes.join(' y ')} respecto de hace una semana.`;
 }
@@ -495,8 +486,8 @@ function trendFold(trend, place) {
   if (!place.comuna) return '';
   const line = weekLine(trend);
   if (!line) return '';
-  return html`<details class="fold"><summary>¿Y la semana pasada?</summary><div>
-    <p class="small">${line}</p>${trend?.method ? html`<p class="tiny muted">${trend.method}</p>` : ''}</div></details>`;
+  return pliegue('¿Y la semana pasada?', html`<div>
+    <p class="small">${line}</p>${trend?.method ? html`<p class="tiny muted">${trend.method}</p>` : ''}</div>`);
 }
 
 /* TEMP-03: «Tu comuna esta temporada» lee `comuna_detail` de /api/panorama?comuna=<code>,
@@ -506,10 +497,10 @@ function panoramaLine(place, panorama) {
   if (!d) return '';
   const c = d.current || {};
   const line = c.n
-    ? `CONAF informó ${fmtNum(c.n)} ${c.n === 1 ? 'incendio' : 'incendios'} en tu comuna esta temporada (${fmtNum(c.ha, 1)} ha)`
+    ? `CONAF informó ${fmtNum(c.n)} ${plural(c.n, 'incendio')} en tu comuna esta temporada (${fmtNum(c.ha, 1)} ha)`
     : 'CONAF todavía no informa incendios en tu comuna esta temporada';
   const prev = d.previous;
-  return html`<p class="tiny muted" style="margin-top:8px">${line}${d.boton_rojo_days ? ` · ${fmtNum(d.boton_rojo_days)} ${d.boton_rojo_days === 1 ? 'día' : 'días'} de Botón Rojo` : ''}${prev ? ` · la temporada anterior: ${fmtNum(prev.n)} (${fmtNum(prev.ha, 1)} ha)` : ''}. (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a></p>`;
+  return notaPie(html`${line}${d.boton_rojo_days ? ` · ${fmtNum(d.boton_rojo_days)} ${plural(d.boton_rojo_days, 'día')} de Botón Rojo` : ''}${prev ? ` · la temporada anterior: ${fmtNum(prev.n)} (${fmtNum(prev.ha, 1)} ha)` : ''}. (cifras de CONAF). <a href="#/temporada">Ver el panorama completo →</a>`);
 }
 
 /* UX-62: «Qué hacer hoy» según el nivel del día, cada acción con su fuente. */
@@ -518,8 +509,8 @@ function prevencionLine(today, calor) {
   if (!resumen) return '';
   const resto = accionesHoy(today.level, { calor }).slice(1);
   return html`<p class="small" style="margin-top:8px"><b>${resumen}</b></p>
-    ${resto.length ? html`<details class="fold"><summary>Qué más puedes hacer hoy</summary><ul class="list">
-      ${resto.map((a) => html`<li><span class="grow small">${a.text} <a class="tiny muted" href="${a.url}" target="_blank" rel="noopener">${a.source} ↗</a></span></li>`)}</ul></details>` : ''}`;
+    ${resto.length ? pliegue('Qué más puedes hacer hoy', html`<ul class="list">
+      ${resto.map((a) => html`<li><span class="grow small">${a.text} ${enl(a.url, `${a.source} ↗`, 'tiny muted')}</span></li>`)}</ul>`) : ''}`;
 }
 
 /* SNASPE: el área protegida más cercana. Sin área, no se pinta nada. */
@@ -527,28 +518,31 @@ export function protectedAreaLine(pa) {
   const area = Array.isArray(pa) ? pa[0] : pa;
   if (!area?.name) return '';
   const km = fmtNum(area.distance_km, 1);
-  return html`<p class="tiny muted" style="margin-top:8px">${dual(
+  return notaPie(html`${dual(
     area.inside
       ? `Dentro de un área protegida del Estado: ${area.name}.`
       : `A ${km} km de un área protegida: ${area.name}.`,
     `${area.category || 'Área protegida'} del SNASPE${area.region ? ` · ${area.region}` : ''} · ${area.inside ? 'dentro del polígono' : `borde a ${km} km`}.`,
-  )} Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.</p>`;
+  )} Fuente: <a href="https://www.conaf.cl/parques-nacionales/" target="_blank" rel="noopener">CONAF</a>.`);
 }
 
-/* AGUA-02/04: pendiente y huella a ≤ 5 km. Sin cicatriz no se habla de ladera quemada.
- * El contrato nuevo trae `relieve` y `cicatriz`; los campos planos quedan como respaldo
- * mientras convivan ambas formas en el servidor. */
+/* Contrato nuevo (`relieve`/`cicatriz`) con respaldo en los campos planos antiguos. */
+const pendienteDe = (t) => t?.relieve?.slope_max_deg ?? t?.slope_deg;
+const cicatrizHaDe = (t) => t?.cicatriz?.ha ?? t?.scar_ha;
+
+/* AGUA-02/04: pendiente y huella a ≤ 5 km. Sin cicatriz no se habla de ladera quemada. */
 function terrenoNota(t) {
   if (!t) return '';
-  const pendiente = t.relieve?.slope_max_deg ?? t.slope_deg;
-  const cicatrizHa = t.cicatriz?.ha ?? t.scar_ha;
-  const pendienteConocida = pendiente != null && Number.isFinite(Number(pendiente));
+  const pendiente = pendienteDe(t);
+  const cicatrizHa = cicatrizHaDe(t);
+  const p = Number(pendiente);
+  const pendienteConocida = pendiente != null && Number.isFinite(p);
   const huella = Number(cicatrizHa) > 0;
   const deConaf = t.cicatriz?.fuente === 'conaf';
   const cuidado = huella && (t.nivel === 'alto' || t.nivel === 'moderado');
   if (!pendienteConocida && !huella) return '';
-  const grados = pendienteConocida ? fmtNum(Number(pendiente), 0) : '';
-  const gradosFinos = pendienteConocida ? fmtNum(Number(pendiente), 1) : '';
+  const grados = pendienteConocida ? fmtNum(p, 0) : '';
+  const gradosFinos = pendienteConocida ? fmtNum(p, 1) : '';
   const ha = huella ? fmtNum(Number(cicatrizHa)) : '';
   const hechos = [
     pendienteConocida ? `pendiente ~${grados}°` : '',
@@ -577,7 +571,7 @@ function incendioCicatriz(cicatriz) {
   if (!inc?.nombre) return '';
   const inicio = typeof inc.inicio === 'string' ? inc.inicio.slice(0, 10) : '';
   const fuente = cicatriz?.fuente === 'conaf'
-    ? html`<a href="https://github.com/deigeprif/public" target="_blank" rel="noopener">CONAF</a>`
+    ? enl('https://github.com/deigeprif/public', 'CONAF')
     : (cicatriz?.fuente === 'satelite' ? 'satélite' : '');
   const partes = [
     fuente,
@@ -592,8 +586,8 @@ export function avisoAluvion(data) {
   const t = data?.terreno;
   const s = data?.senal;
   if (t?.aviso !== true) return '';
-  const pendienteMax = t?.relieve?.slope_max_deg ?? t?.slope_deg;
-  const cicatrizHa = t?.cicatriz?.ha ?? t?.scar_ha;
+  const pendienteMax = pendienteDe(t);
+  const cicatrizHa = cicatrizHaDe(t);
   const detalleTec = [
     Number.isFinite(s?.mm_3h) ? `${fmtNum(s.mm_3h, 1)} mm en 3 h` : '',
     s?.isoterma_m != null ? `isoterma 0 °C a ${fmtNum(s.isoterma_m)} m` : '',
@@ -609,9 +603,9 @@ export function avisoAluvion(data) {
 
 /* AGUA-09/AGUA-04: lluvia prevista e isoterma 0 °C; `terreno.aviso` abre el aviso y recuerda a SENAPRED. */
 export function lluviaLine(data, dmc = null) {
-  const s = data?.senal;
-  if (!s || !Number.isFinite(s.mm_3h) || s.mm_3h <= 0) return '';
-  return html`${avisoAluvion(data)}${lluviaDetalle(data, dmc)}`;
+  // La guarda vive en lluviaDetalle: si no pasa, no hay línea (ni aviso de aluvión).
+  const detalle = lluviaDetalle(data, dmc);
+  return detalle ? html`${avisoAluvion(data)}${detalle}` : detalle;
 }
 
 function lluviaDetalle(data, dmc = null) {
@@ -621,18 +615,20 @@ function lluviaDetalle(data, dmc = null) {
   const cuando = s.ventana ? ` el ${fmtDateTime(s.ventana)}` : '';
   const iso = s.isoterma_m != null ? ` La isoterma 0 °C está a ${fmtNum(s.isoterma_m)} m.` : '';
   const cierre = t?.aviso === true ? '' : ' Es un dato del pronóstico. BRASA te avisa si se pronostica lluvia intensa sobre una zona quemada cercana; las alertas oficiales de aluvión las emite SENAPRED.';
-  return html`<p class="tiny muted" style="margin-top:8px">${s.intensa
+  return notaPie(html`${s.intensa
     ? html`<b>Lluvia intensa prevista:</b>` : html`Lluvia prevista:`}
     hasta ${fmtNum(s.mm_3h, 1)} mm en 3 horas${cuando}.${iso}${terrenoNota(t)}${cierre}
-    Fuente: ${data.source || 'Open-Meteo'}.${lluviaMedidaDmc(dmc)}</p>`;
+    Fuente: ${data.source || 'Open-Meteo'}.${lluviaMedidaDmc(dmc)}`);
 }
+
+const lluviaTxt = (s) => s.rain_24h_mm != null ? `lluvia 24 h ${fmtNum(s.rain_24h_mm, 1)} mm` : `lluvia 6 h ${fmtNum(s.rain_6h_mm, 1)} mm`;
 
 function lluviaMedidaDmc(d) {
   const s = d?.station;
   if (!s?.observed_at || (s.rain_24h_mm == null && s.rain_6h_mm == null)) return '';
-  const r = s.rain_24h_mm != null ? `lluvia 24 h ${fmtNum(s.rain_24h_mm,1)} mm` : `lluvia 6 h ${fmtNum(s.rain_6h_mm,1)} mm`;
+  const r = lluviaTxt(s);
   const u = d?.source_url;
-  return html` Medido en ${s.name} (${fmtNum(s.distance_km,1)} km): ${r} a las ${fmtTime(s.observed_at)} — ${u ? html`<a href="${u}" target="_blank" rel="noopener">DMC</a>` : 'DMC'}.`;
+  return html` Medido en ${s.name} (${fmtNum(s.distance_km,1)} km): ${r} a las ${fmtTime(s.observed_at)} — ${u ? enl(u, 'DMC') : 'DMC'}.`;
 }
 
 /* OFI-33/36: medición real de la estación DMC (≤25 km, ≤3 h). */
@@ -643,12 +639,11 @@ export function stationLine(data) {
   if (s.temperature_c != null) partes.push(`${fmtNum(s.temperature_c, 1)} °C`);
   if (s.humidity != null) partes.push(`humedad ${fmtNum(s.humidity)} %`);
   if (s.wind_kmh != null) partes.push(`viento ${fmtNum(s.wind_kmh)} km/h${s.wind_deg != null ? ` ${windFrom(s.wind_deg)}` : ''}`);
-  if (s.rain_24h_mm != null) partes.push(`lluvia 24 h ${fmtNum(s.rain_24h_mm,1)} mm`);
-  else if (s.rain_6h_mm != null) partes.push(`lluvia 6 h ${fmtNum(s.rain_6h_mm,1)} mm`);
+  if (s.rain_24h_mm != null || s.rain_6h_mm != null) partes.push(lluviaTxt(s));
   if (s.pressure_hpa != null) partes.push(`presión ${fmtNum(s.pressure_hpa,0)} hPa`);
   if (!partes.length) return '';
-  const fuente = data.source_url ? html`<a href="${data.source_url}" target="_blank" rel="noopener">${data.source || 'DMC'} ↗</a>` : data.source || 'DMC';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km,1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.</p>`;
+  const fuente = data.source_url ? enl(data.source_url, `${data.source || 'DMC'} ↗`) : data.source || 'DMC';
+  return notaPie(html`<b>Medido en la estación ${s.name}</b> (a ${fmtNum(s.distance_km,1)} km): ${partes.join(', ')} a las ${fmtTime(s.observed_at)} (${ago(s.observed_at)}). Fuente: ${fuente} — medición real, no un pronóstico.`);
 }
 
 const AIR_SIGNAL = {
@@ -674,37 +669,22 @@ export function airLine(data) {
   const fin = (v) => typeof v === 'number' && Number.isFinite(v);
   if (!a || !fin(a.pm25) || !a.observed_at) return '';
   const pm25Txt = fmtNum(a.pm25, 1);
-  let pm25Part;
-  if (a.pm25_period === 'horario') {
-    const pm2524 = fin(a.pm25_24h) && fmtNum(a.pm25_24h, 1) !== pm25Txt
-      ? ` (media 24 h: ${fmtNum(a.pm25_24h, 1)} µg/m³)`
-      : '';
-    pm25Part = dual(
-      `partículas finas (MP2,5) ${pm25Txt} µg/m³ en la última hora`,
-      `MP2,5 horario ${pm25Txt} µg/m³${pm2524}`,
-    );
-  } else if (a.pm25_period === '24h') {
-    pm25Part = dual(
-      `partículas finas (MP2,5) ${pm25Txt} µg/m³ (promedio de 24 h)`,
-      `MP2,5 media 24 h ${pm25Txt} µg/m³`,
-    );
-  } else {
-    pm25Part = dual(
-      `partículas finas (MP2,5) ${pm25Txt} µg/m³`,
-      `MP2,5 ${pm25Txt} µg/m³`,
-    );
-  }
+  const media24 = fin(a.pm25_24h) && fmtNum(a.pm25_24h, 1) !== pm25Txt ? ` (media 24 h: ${fmtNum(a.pm25_24h, 1)} µg/m³)` : '';
+  const pm25Part = a.pm25_period === 'horario'
+    ? dual(`partículas finas (MP2,5) ${pm25Txt} µg/m³ en la última hora`, `MP2,5 horario ${pm25Txt} µg/m³${media24}`)
+    : dual(`partículas finas (MP2,5) ${pm25Txt} µg/m³${a.pm25_period === '24h' ? ' (promedio de 24 h)' : ''}`,
+      `MP2,5 ${a.pm25_period === '24h' ? 'media 24 h ' : ''}${pm25Txt} µg/m³`);
   const extrasSencillo = [];
   const extrasTecnico = [];
   if (fin(a.pm10)) {
-    const u = a.pm10_unit || 'µg/m³';
-    extrasSencillo.push(`polvo grueso (MP10) ${fmtNum(a.pm10, 1)} ${u}`);
-    extrasTecnico.push(`MP10 ${fmtNum(a.pm10, 1)} ${u}`);
+    const v = `${fmtNum(a.pm10, 1)} ${a.pm10_unit || 'µg/m³'}`;
+    extrasSencillo.push(`polvo grueso (MP10) ${v}`);
+    extrasTecnico.push(`MP10 ${v}`);
   }
   if (fin(a.co)) {
-    const u = a.co_unit || 'ppm';
-    extrasSencillo.push(`monóxido de carbono (CO) ${fmtNum(a.co, 2)} ${u}`);
-    extrasTecnico.push(`CO ${fmtNum(a.co, 2)} ${u}`);
+    const v = `${fmtNum(a.co, 2)} ${a.co_unit || 'ppm'}`;
+    extrasSencillo.push(`monóxido de carbono (CO) ${v}`);
+    extrasTecnico.push(`CO ${v}`);
   }
   const extraPart = extrasTecnico.length
     ? html`, ${dual(extrasSencillo.join(', '), extrasTecnico.join(', '))}`
@@ -720,7 +700,7 @@ export function airLine(data) {
     icapPart = html`, ${dual(`calidad del aire (promedio de 24 h): ${a.status}`, a.status)}`;
   }
   const respaldo = a.source_mode === 'snapshot' ? ' (respaldo reciente)' : '';
-  return html`<p class="tiny muted" style="margin-top:8px"><b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: <a class="tiny muted" href="https://sinca.mma.gob.cl/" target="_blank" rel="noopener">SINCA ↗</a>${respaldo}. Medición preliminar del Ministerio del Medio Ambiente de Chile, no un pronóstico.</p>`;
+  return notaPie(html`<b>Aire medido en la estación ${a.name}</b> (${a.comuna || 'SINCA'}, a ${fmtNum(a.distance_km, 1)} km): ${pm25Part}${extraPart}${signalPart}${icapPart}, medido a las ${fmtTime(a.observed_at)} (${ago(a.observed_at)}). Fuente: ${enl('https://sinca.mma.gob.cl/', 'SINCA ↗', 'tiny muted')}${respaldo}. Medición preliminar del Ministerio del Medio Ambiente de Chile, no un pronóstico.`);
 }
 
 /* OFI-04: «La autoridad informa» — las alertas vigentes de SENAPRED que nombran a la
@@ -731,15 +711,19 @@ export function autoridadBlock(data) {
   if (!lista?.length) return '';
   const extra = lista.length - 3;
   return html`<div class="autoridad"><b class="small">La autoridad informa:</b>
-    <ul class="list">${lista.slice(0, 3).map((a) => html`<li><a class="clamp-2" href="${a.url}" target="_blank" rel="noopener">${a.title} ↗</a> <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
-    ${extra > 0 ? html`<p class="tiny muted"><a href="#/alertas">y ${extra} ${extra === 1 ? 'alerta más' : 'alertas más'}: ver todas en «Avisos» →</a></p>` : ''}
+    <ul class="list">${lista.slice(0, 3).map((a) => html`<li>${enl(a.url, `${a.title} ↗`, 'clamp-2')} <span class="tiny muted">${a.scope === 'comuna' ? 'tu comuna' : 'tu región'}${a.issued_at ? ` · ${ago(a.issued_at)}` : ''}</span></li>`)}</ul>
+    ${extra > 0 ? html`<p class="tiny muted"><a href="#/alertas">y ${extra} ${plural(extra, 'alerta más', 'alertas más')}: ver todas en «Avisos» →</a></p>` : ''}
     <p class="tiny muted">Texto oficial de SENAPRED — BRASA no emite alertas.</p></div>`;
 }
 
 export function placeCard(place, summary, history, temporada, trend, panorama, lluvia, station, air, oficial, revisado, cicatrices) {
   const failed = !summary || summary.error;
   const status = failed ? 'sindatos' : summary.status;
-  const botonRojo = place.comuna && summary?.risk_days?.some((d) => d.boton_rojo_hours);
+  const dias = summary?.risk_days || [];
+  const dia0 = dias[0];
+  const diasBr = dias.some((d) => d.boton_rojo_hours);
+  const botonRojo = place.comuna && diasBr;
+  const brTxt = `Agregar los días de Botón Rojo de ${place.comuna?.name} a tu calendario`;
   // MZ-09: con el lugar en «urgente» o «aviso», lo que dice SENAPRED va arriba, junto al
   // estado; si no, va justo después de las acciones para que «Qué hago» quepa en la
   // primera pantalla (tres alertas regionales miden unos 400 px en 390 px de ancho).
@@ -753,9 +737,9 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
   const detalle = [
     ...(failed ? [] : [
       riskPointLine(summary.risk_point),
-      whyLine(summary.risk_days?.[0]),
+      whyLine(dia0),
       weekBlock(summary.week),
-      prevencionLine(summary.risk_days?.[0], (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
+      prevencionLine(dia0, (summary.dmc_alerts || []).some((a) => /calor/i.test(a.event || a.label || ''))),
       trendFold(summary.trend, place),
       panoramaLine(place, panorama),
       protectedAreaLine(summary.protected_area),
@@ -764,8 +748,7 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       airLine(air),
     ]),
     historyBlock(history),
-    summary?.risk_days?.some((d) => d.boton_rojo_hours)
-      ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
+    diasBr ? html`<div class="btn-row"><button class="btn btn-sm" data-act="ics">Añadir los días de Botón Rojo al calendario</button></div>` : '',
     seasonBlock(place, temporada),
     cicatricesBlock(place, cicatrices),
   ].map(String).join('');
@@ -775,13 +758,13 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
         <div class="card-sub">${place.comuna ? place.comuna.name : 'Fuera de una comuna conocida'} · aviso a ${fmtNum(place.radius_km)} km</div>
         ${revisado ? html`<div class="tiny muted" style="margin-top:2px">Revisado ${ago(revisado)}</div>` : ''}
         ${place.older_adult || place.shared ? html`<div class="badges" style="margin-top:6px">${place.older_adult ? html`<span class="tag tag-older">Persona mayor · aviso anticipado</span>` : ''}${place.shared ? html`<span class="tag tag-live">Compartido con la familia</span>` : ''}</div>` : ''}</div></div>
-      <span class="status-badge st-${status}">${failed ? 'Sin datos' : STATUS[status].label}</span>
+      ${badge(status, failed ? 'Sin datos' : STATUS[status].label)}
     </div>
     ${failed
       ? html`<div class="place-body" role="status">
         <p><b>No pudimos consultar este lugar ahora.</b> Que falle la consulta no significa que no haya fuego cerca: si ves humo o llamas, llama al 130 o al 132.</p>
         <div class="btn-row"><button class="btn btn-sm btn-primary" data-act="reintentar">Reintentar</button></div></div>`
-      : html`${placeBody(place, summary)}${dayStrip(summary.risk_days)}${autoridadArriba ? autoridadBlock(oficial) : ''}`}
+      : html`${placeBody(place, summary)}${dayStrip(dias)}${autoridadArriba ? autoridadBlock(oficial) : ''}`}
     ${avisoAluvion(lluvia)}
     <div class="card-actions">
       <button class="btn btn-sm ${status === 'tranquilo' ? '' : 'btn-primary'}" data-act="que-hacer">Qué hago</button>
@@ -789,18 +772,16 @@ export function placeCard(place, summary, history, temporada, trend, panorama, l
       <button class="btn btn-sm" data-act="compartir">${place.shared ? 'Enlace para la familia' : 'Compartir con la familia'}</button>
     </div>
     ${!failed && !autoridadArriba ? autoridadBlock(oficial) : ''}
-    ${detalle ? html`<details class="fold"><summary>Más sobre este lugar</summary><div>${raw(detalle)}</div></details>` : ''}
-    <details class="fold"><summary>Más acciones</summary><div>
+    ${detalle ? pliegue('Más sobre este lugar', html`<div>${raw(detalle)}</div>`) : ''}
+    ${pliegue('Más acciones', html`<div>
       <div class="card-actions">
         <button class="btn btn-sm" data-act="servicios">Dónde reunirse</button>
         <button class="btn btn-sm btn-ghost" data-act="editar">Editar</button>
         <button class="btn btn-sm btn-danger" data-act="borrar" aria-label="Eliminar ${place.name}">Eliminar</button>
-        ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics"
-          title="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario"
-          aria-label="Agregar los días de Botón Rojo de ${place.comuna.name} a tu calendario">Calendario</a>` : ''}
+        ${botonRojo ? html`<a class="btn btn-sm btn-ghost" href="/api/calendar/boton-rojo/${place.comuna.code}.ics" title="${brTxt}" aria-label="${brTxt}">Calendario</a>` : ''}
       </div>
       ${botonRojo ? html`<p class="tiny muted" style="margin-top:6px">Archivo de calendario: se actualiza solo si lo suscribes.</p>` : ''}
-    </div></details>
+    </div>`)}
   </article>`;
 }
 
@@ -813,11 +794,12 @@ function guidanceModal(status, place, failed = false) {
     ${failed ? html`<p class="small"><b>La consulta falló:</b> no sabemos si hay calor cerca ni cómo viene el clima. Reintenta desde la tarjeta; ante humo o llamas, llama al 132.</p>` : ''}
     <ol class="steps">${steps.map((g) => html`<li>${g}</li>`)}</ol>
     ${phonesHtml()}
-    ${synth ? html`<div class="btn-row" style="margin-top:10px"><button class="btn btn-speak" id="gm-listen" type="button" aria-label="Escuchar los pasos de qué hacer">Escuchar</button></div>` : ''}
+    ${synth ? html`<div class="btn-row" style="margin-top:10px">${escucha('gm-listen', 'btn btn-speak', 'Escuchar los pasos de qué hacer')}</div>` : ''}
     <p class="tiny muted" style="margin-top:12px">Recomendaciones generales. Las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.</p>`, (body) => {
-    body.querySelector('#gm-listen')?.addEventListener('click', () => speak(
+    const btn = body.querySelector('#gm-listen');
+    alClick(btn, () => speak(
       `${title}. ${steps.join(' ')} Recomendaciones generales: las instrucciones de SENAPRED, CONAF, Bomberos y tu municipio siempre prevalecen.`,
-      body.querySelector('#gm-listen')));
+      btn));
   });
   dlg.addEventListener('close', stopSpeak, { once: true }); // si el modal se cierra leyendo, la voz no queda huérfana
 }
@@ -832,25 +814,25 @@ async function shareModal(place) {
     <p class="small">Quien tenga este enlace verá el estado de este lugar: si hay calor cerca, el viento y el peligro de los próximos días. <b>No necesita cuenta</b> y puede activar sus propios avisos para este lugar.</p>
     <div class="share-url"><input class="input" id="share-url" readonly value="${url}" aria-label="Enlace para compartir" /></div>
     <div class="btn-row" style="margin-top:10px">
-      <a class="btn btn-primary" href="https://wa.me/?text=${encodeURIComponent(text)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+      ${enl(`https://wa.me/?text=${encodeURIComponent(text)}`, 'Enviar por WhatsApp', 'btn btn-primary')}
       <button class="btn" id="share-copy">Copiar enlace</button>
       ${navigator.share ? html`<button class="btn" id="share-native">Más opciones</button>` : ''}
     </div>
     <p class="tiny muted" style="margin-top:12px">Compártelo solo con personas de confianza: muestra dónde está el lugar${place.older_adult ? ' <b>y que ahí vive alguien que necesita ayuda para salir</b>' : ''}.</p>
     <div class="btn-row"><button class="btn btn-sm btn-danger" id="share-stop">Dejar de compartir</button></div>`, (body) => {
-    body.querySelector('#share-copy').addEventListener('click', async () => {
+    alSel(body, '#share-copy', async () => {
       try { await navigator.clipboard.writeText(url); toast('Enlace copiado.'); } catch { body.querySelector('#share-url').select(); toast('Selecciona el enlace y cópialo.'); }
     });
-    body.querySelector('#share-native')?.addEventListener('click', () => navigator.share({ title: `BRASA · ${place.name}`, text, url }).catch(() => {}));
-    body.querySelector('#share-stop').addEventListener('click', async () => {
+    alSel(body, '#share-native', () => navigator.share({ title: `BRASA · ${place.name}`, text, url }).catch(() => {}));
+    alSel(body, '#share-stop', async () => {
       try {
         await api.unsharePlace(place.id);
         closeModal(); toast('Listo: el enlace ya no funciona.');
-        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+        avisoPlaces();
       } catch (err) { toast(err.message, 'error'); }
     });
   });
-  if (!place.shared) document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+  if (!place.shared) avisoPlaces();
 }
 
 async function showServices(place) {
@@ -885,20 +867,24 @@ function applySummary(place, result, ahora = Date.now()) {
   summariesAt.delete(place.id);
 }
 
+/* El resumen de un lugar: un fallo se trata como «sin datos», nunca como error sin capturar. */
+const pedirResumen = (id) => api.placeSummary(id).catch(() => ({ error: true }));
+const marcarConsulta = () => (lastSummaryAt = new Date().toISOString());
+
 /* MZ-06: vuelve a pedir SOLO el resumen de cada lugar (nunca historial, panorama, lluvia,
  * estación, aire ni alertas oficiales) y repinta sin perder la posición del panel. El modo
  * emergencia se reevalúa solo: paint() ya decide. `mine` congela el turno para que un
  * render nuevo gane sobre un refresco viejo. */
 async function refreshSummaries(container) {
-  const places = store.get('places') || [];
-  if (!places.length) { keepPlace(container, () => paint(container)); return; }
+  const places = lugares();
+  if (!places.length) { repinta(container); return; }
   const mine = turno;
-  lastSummaryAt = new Date().toISOString();
-  const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))));
-  if (!mounted || mine !== turno) return;
+  marcarConsulta();
+  const results = await Promise.all(places.map((p) => pedirResumen(p.id)));
+  if (!turnoActivo(mine)) return;
   const ahora = Date.now();
   places.forEach((p, i) => applySummary(p, results[i], ahora));
-  keepPlace(container, () => paint(container));
+  repinta(container);
   loadIncidentes(); // los anillos de MZ-08 siguen el mismo turno de refresco
 }
 
@@ -906,7 +892,7 @@ function maybeRefresh(container, motivo) {
   // Aunque no toque volver a pedir resúmenes, repintamos: el héroe y el aviso de datos
   // atrasados cambian con lo que ya está en el store (focos, última ingesta).
   if (!debeRefrescar({ ultimo: lastSummaryAt, ahora: Date.now(), visible: document.visibilityState === 'visible', motivo })) {
-    keepPlace(container, () => paint(container));
+    repinta(container);
     return;
   }
   refreshSummaries(container);
@@ -918,12 +904,63 @@ async function retrySummary(container, place, btn) {
   btn.disabled = true;
   btn.textContent = 'Consultando…';
   const mine = turno;
-  const summary = await api.placeSummary(place.id).catch(() => ({ error: true }));
-  if (!mounted || mine !== turno) return;
-  lastSummaryAt = new Date().toISOString();
+  const summary = await pedirResumen(place.id);
+  if (!turnoActivo(mine)) return;
+  marcarConsulta();
   applySummary(place, summary);
   if (summary.error) toast('Sigue sin poder consultar este lugar.', 'error');
-  keepPlace(container, () => paint(container));
+  repinta(container);
+}
+
+/* REND-02 t3: caché por fuente; historial/panorama/lluvia/estación 10 min,
+ * aire 30 min y oficiales 5 min. */
+const secGeo = (ruta) => (p) => request(`${ruta}?lat=${p.lat}&lon=${p.lon}`, { withMeta: true });
+export const SECUNDARIOS = [ // [vigencia ms, Map visible, cómo pedir]
+  [10 * 60000, histories, (p) => api.placeHistory(p.id, 30, { withMeta: true })],
+  [10 * 60000, panoramas, (p) => (p.comuna ? api.panorama(p.comuna.code, undefined, { withMeta: true }) : NO_APLICA)],
+  [10 * 60000, lluvias, secGeo('/api/climate/lluvia')],
+  [10 * 60000, stations, secGeo('/api/climate/station')],
+  [30 * 60000, aires, secGeo('/api/climate/air')],
+  [5 * 60000, oficiales, secGeo('/api/alerts/official')],
+];
+const secRegistro = new Map(); // clave → vigente o promesa en vuelo
+
+const repinta = (container) => keepPlace(container, () => paint(container));
+
+/* Cambiar lugar invalida; panorama se comparte por comuna. */
+const claveSec = (i, p) => (i === 1 ? `1|${p.comuna?.code ?? 'x'}` : `${i}|${p.id}|${p.lat}|${p.lon}|${p.radius_km}`);
+const NO_APLICA = {}; // panorama sin comuna
+
+/* Retira de inmediato lo visible si cambió la clave del lugar. */
+function vincular(registro, i, p, mapa) {
+  const slot = `@${i}|${p.id}`;
+  const clave = claveSec(i, p);
+  if (registro.get(slot) !== clave) { mapa.delete(p.id); registro.set(slot, clave); }
+  return [slot, clave];
+}
+
+/* Reutiliza vigentes y vuelos; descarta respuestas de claves reemplazadas. */
+export function pedirSecundario(registro, i, p, fila) {
+  const [ttl, mapa, pedir] = fila;
+  const [slot, clave] = vincular(registro, i, p, mapa);
+  const aplicar = (v) => registro.get(slot) !== clave ? null
+    : v == null || v === NO_APLICA ? (mapa.delete(p.id) ? NO_APLICA : null)
+      : mapa.get(p.id) === v ? null : (mapa.set(p.id, v), v);
+  const hit = registro.get(clave);
+  if (hit?.prom) return hit.prom.then(aplicar);
+  if (hit && Date.now() - hit.at < ttl) return Promise.resolve(aplicar(hit.val));
+  const prom = Promise.resolve().then(() => pedir(p)).catch(() => null).then((r) => {
+    const meta = r && Object.hasOwn(r, 'body') && Object.hasOwn(r, 'cachedAt');
+    const v = meta ? r.body : r;
+    const fuente = i === 1 ? v?.updated_at : i === 5 ? v?.fetched_at : null;
+    const fechas = [meta ? r.cachedAt : null, fuente]
+      .map((s) => Date.parse(s)).filter(Number.isFinite);
+    if (v != null) registro.set(clave, { at: Math.min(Date.now(), ...fechas), val: v });
+    else registro.delete(clave);
+    return v;
+  });
+  registro.set(clave, { prom });
+  return prom.then(aplicar);
 }
 
 /* MZ-07 + PERF-10: la vista se pinta por etapas. Primero resúmenes + me + avisos → héroe,
@@ -933,21 +970,23 @@ async function retrySummary(container, place, btn) {
  * `turno` descarta renders viejos. */
 async function render(container) {
   const mine = ++turno;
-  const places = store.get('places') || [];
+  const places = lugares();
   const [me, avisos, ...sums] = await Promise.all([
     api.me().catch(() => null),
     api.alerts().then((r) => r.alerts).catch(() => []),
-    ...places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))),
+    ...places.map((p) => pedirResumen(p.id)),
   ]);
-  if (mine !== turno || !mounted) return;
+  if (!turnoActivo(mine)) return;
   meData = me; inboxData = avisos;
-  lastSummaryAt = new Date().toISOString();
+  marcarConsulta();
   const ahora = Date.now();
   const ids = new Set(places.map((p) => p.id));
-  for (const id of [...summaries.keys()]) if (!ids.has(id)) { summaries.delete(id); summariesAt.delete(id); }
-  for (const m of [histories, panoramas, lluvias, stations, aires, oficiales]) {
-    for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
-  }
+  // Antes del primer pintado: lo visible de un lugar editado se retira enseguida.
+  const claves = new Set(places.flatMap((p) => SECUNDARIOS.flatMap(([, m], i) => vincular(secRegistro, i, p, m))));
+  const retirar = (mapa) => { for (const id of [...mapa.keys()]) if (!ids.has(id)) mapa.delete(id); };
+  retirar(summaries); retirar(summariesAt);
+  for (const [, m] of SECUNDARIOS) retirar(m);
+  secRegistro.forEach((_, clave) => claves.has(clave) || secRegistro.delete(clave));
   places.forEach((p, i) => applySummary(p, sums[i], ahora));
   paint(container);
   if (!places.length) return;
@@ -955,19 +994,19 @@ async function render(container) {
   // varias respuestas cercanas se funden en un solo keepPlace(paint).
   let paintPendiente = false;
   const agendarPaint = () => {
-    if (paintPendiente || mine !== turno || !mounted) return;
+    if (paintPendiente || !turnoActivo(mine)) return;
     paintPendiente = true;
     const correr = () => {
       paintPendiente = false;
-      if (mine !== turno || !mounted) return;
-      keepPlace(container, () => paint(container));
+      if (!turnoActivo(mine)) return;
+      repinta(container);
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(correr);
     else setTimeout(correr, 0);
   };
   // Temporada y cicatrices (globales, solo visibles en tarjetas) llegan juntas.
   Promise.allSettled([loadTemporada(), loadCicatrices()]).then(([tempRes, cicRes]) => {
-    if (mine !== turno || !mounted) return;
+    if (!turnoActivo(mine)) return;
     let cambio = false;
     if (tempRes.status === 'fulfilled' && tempRes.value != null && temporadaData !== tempRes.value) {
       temporadaData = tempRes.value;
@@ -979,48 +1018,34 @@ async function render(container) {
     }
     if (cambio) agendarPaint();
   });
-  // Los seis datos secundarios por lugar (con panorama deduplicado por comuna dentro del
-  // ciclo) actualizan en cuanto llegan, agrupando repintados en un solo cuadro.
-  const panoramaPorComuna = new Map();
-  const pedirPanorama = (code) => {
-    if (!panoramaPorComuna.has(code)) panoramaPorComuna.set(code, api.panorama(code).catch(() => null));
-    return panoramaPorComuna.get(code);
-  };
-  const tareas = places.flatMap((p) => [
-    [api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v)],
-    [p.comuna ? pedirPanorama(p.comuna.code) : Promise.resolve(null), (v) => panoramas.set(p.id, v)],
-    [request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v)],
-    [request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v)],
-    [request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v)],
-    [request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v)],
-  ]);
-  tareas.forEach(([prom, guardar]) => {
-    prom.then((v) => {
-      if (mine !== turno || !mounted || v == null) return;
-      guardar(v);
-      agendarPaint();
-    });
-  });
+  // Consulta solo lo vencido; cada resultado repinta en cuanto llega.
+  places.forEach((p) => SECUNDARIOS.forEach((fila, i) => {
+    pedirSecundario(secRegistro, i, p, fila).then((v) => v != null && agendarPaint());
+  }));
 }
 
 /* PERF-14: el título es fijo y se pinta al montar; los datos repintan solo las zonas a sus
  * lados (display:contents), así el LCP no espera la primera consulta. */
-function tituloZona() { return (store.get('places') || []).length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'; }
+function tituloZona() { return lugares().length ? 'Tus lugares, hoy' : '¿Hay fuego cerca de tu casa?'; }
 function shellZona(container) {
   // data-shell marca el cascarón: motion.js no gasta la ventana de entrada con él;
   // la animación la disparan los datos al llenar las zonas (PERF-14).
   container.innerHTML = '<div id="zona-a"></div><h1 class="view-title" id="zona-title" data-shell></h1><div id="zona-b"></div>';
-  container.querySelector('#zona-title').textContent = tituloZona();
+  $('#zona-title', container).textContent = tituloZona();
 }
 function syncTitulo(container) {
-  const el = container.querySelector('#zona-title');
+  const el = $('#zona-title', container);
   if (!el) return; // modo emergencia: la vista completa no tiene este título
   const t = tituloZona();
   if (el.textContent !== t) el.textContent = t;
 }
 
+/* Cascarón común del héroe de la portada: brasero con su tono y el contenido interior. */
+const heroZona = (cls, tone, inner) => html`<div class="ember-hero brasero${cls ? ` ${cls}` : ''}" role="status"><span class="brasa-marco">${emberSvg({ tone })}</span><div>${inner}</div></div>`;
+
 function paint(container) {
-  const places = store.get('places') || [];
+  const q = (s) => container.querySelector(s);
+  const places = lugares();
   const config = store.get('config');
   const me = meData; const inbox = inboxData;
   stopSpeak(); // un repintado deja el botón «Detener» huérfano (igual que en lite.js)
@@ -1030,52 +1055,50 @@ function paint(container) {
   const urgent = places.map((p) => [p, summaries.get(p.id)]).filter(([, x]) => x?.status === 'urgente')
     .sort((a, b) => (a[1].nearby?.[0]?.distance_km ?? 99) - (b[1].nearby?.[0]?.distance_km ?? 99));
   if (urgent.length && !emDismissed(emKey(urgent))) {
-    if (!emActive) { emActive = true; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'full' })); }
+    if (!emActive) { emActive = true; moverHoja('full'); }
     container.innerHTML = String(emergencyView(urgent));
     document.documentElement.classList.add('emergency-on');
-    const emListen = container.querySelector('#em-listen');
-    emListen?.addEventListener('click', () => speak(
-      `${['.em-head', '.em-title', '.em-sub', '.em-official', '.em-steps'].map((s) => container.querySelector(s)?.innerText.trim()).filter(Boolean).join(' ')} BRASA no es una alerta oficial: sigue a SENAPRED.`,
+    const emListen = q('#em-listen');
+    alClick(emListen, () => speak(
+      `${['.em-head', '.em-title', '.em-sub', '.em-official', '.em-steps'].map((s) => q(s)?.innerText.trim()).filter(Boolean).join(' ')} BRASA no es una alerta oficial: sigue a SENAPRED.`,
       emListen));
-    container.querySelector('#em-full').addEventListener('click', () => {
+    alClick(q('#em-full'), () => {
       try { sessionStorage.setItem(EM_KEY, emKey(urgent)); } catch { /* sin almacenamiento: se muestra igual la vista completa */ }
       render(container);
     });
     const [place] = urgent[0];
-    fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5);
+    fly(place.lon, place.lat, zoomLugar(place));
     return;
   }
   document.documentElement.classList.remove('emergency-on');
-  if (emActive) { emActive = false; document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'half' })); }
-  if (!container.querySelector('#zona-title')) shellZona(container); // la vista de emergencia lo reemplazó
-  container.querySelector('#zona-title')?.removeAttribute('data-shell'); // ya hay datos: la entrada se anima con ellos
+  if (emActive) { emActive = false; moverHoja('half'); }
+  if (!q('#zona-title')) shellZona(container); // la vista de emergencia lo reemplazó
+  q('#zona-title')?.removeAttribute('data-shell'); // ya hay datos: la entrada se anima con ellos
   syncTitulo(container);
   const channels = me && (me.push || me.telegram);
   const chileHot = (store.get('observations') || []).filter((o) => o.region && ['alta', 'nominal', 'media'].includes(o.confidence)
     && Date.now() - Date.parse(o.observed_at) < 24 * 3600000).length;
   // Lugares cuya consulta falló: el héroe no puede declarar la zona «tranquila» mientras falten datos.
   const nFailed = places.filter((p) => !summaries.get(p.id) || summaries.get(p.id).error).length;
+  const lastIngest = store.get('status')?.last_ingest_at;
+  // Lugar que representa el estado del héroe: lo usan «Qué hago ahora» y «Escuchar».
+  const worstPlace = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
   const hero = places.length
     ? worst && (worst !== 'tranquilo' || !nFailed)
-    ? html`<div class="ember-hero brasero st-${worst}" role="status"><span class="brasa-marco">${emberSvg({ tone: worst })}</span>
-        <div><div class="hero-label">${STATUS[worst].title}</div>
+    ? heroZona(`st-${worst}`, worst, html`<div class="hero-label">${STATUS[worst].title}</div>
         <small>${places.length === 1 ? 'En tu lugar' : `En tus ${places.length} lugares`}. ${statusText(worst, worstSummary?.cause)}.</small>
         ${worst !== 'tranquilo' ? html`<div class="btn-row hero-cta">${worst === 'urgente' ? html`<a class="btn btn-sm btn-call" href="tel:132">Llamar a Bomberos · 132</a>` : ''}
           <button class="btn btn-sm ${worst === 'urgente' ? 'btn-blue' : 'btn-primary'}" id="hero-what">Qué hago ahora</button>
-          ${synth ? html`<button class="btn btn-sm btn-speak" id="hero-listen" type="button" aria-label="Escuchar el estado y qué hacer ahora">Escuchar</button>` : ''}</div>` : ''}</div></div>`
-    : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
-        <div><div class="hero-label">No pudimos consultar ${nFailed === places.length ? 'tus lugares' : `${nFailed === 1 ? 'uno' : nFailed} de tus lugares`} ahora</div>
-        <small>Puede ser tu conexión o el servidor; no significa que no haya fuego cerca. Si ves humo o llamas, llama al 130 o al 132.</small></div></div>`
-    : !store.get('status')?.last_ingest_at
-    ? html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: 'tranquilo' })}</span>
-        <div><div class="hero-label">Aún no llegan datos de los satélites</div>
-        <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small></div></div>`
-    : html`<div class="ember-hero brasero" role="status"><span class="brasa-marco">${emberSvg({ tone: chileHot ? 'brasa' : 'tranquilo' })}</span>
-        <div><div class="hero-figure tabular">${fmtNum(chileHot)}</div>
+          ${escucha('hero-listen', 'btn btn-sm btn-speak', 'Escuchar el estado y qué hacer ahora')}</div>` : ''}`)
+    : heroZona('', 'tranquilo', html`<div class="hero-label">No pudimos consultar ${nFailed === places.length ? 'tus lugares' : `${nFailed === 1 ? 'uno' : nFailed} de tus lugares`} ahora</div>
+        <small>Puede ser tu conexión o el servidor; no significa que no haya fuego cerca. Si ves humo o llamas, llama al 130 o al 132.</small>`)
+    : !lastIngest
+    ? heroZona('', 'tranquilo', html`<div class="hero-label">Aún no llegan datos de los satélites</div>
+        <small>BRASA los revisa cada 10 minutos. Mientras tanto, si ves fuego o humo, llama al 130 o al 132.</small>`)
+    : heroZona('', chileHot ? 'brasa' : 'tranquilo', html`<div class="hero-figure tabular">${fmtNum(chileHot)}</div>
         <small>${dual(chileHot === 1 ? 'punto de calor confiable visto hoy por satélites en Chile' : 'puntos de calor confiables vistos hoy por satélites en Chile',
-          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza nominal, media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small></div></div>`;
+          `${chileHot === 1 ? 'píxel caliente' : 'píxeles calientes'} de confianza nominal, media o alta en Chile, últimas 24 h (GOES + VIIRS/MODIS)`)}</small>`);
   // Datos atrasados: «no vemos fuego» deja de significar «no hay fuego».
-  const lastIngest = store.get('status')?.last_ingest_at;
   const staleMin = lastIngest ? minutesSince(lastIngest) : 0;
   const staleNote = staleMin > STALE_MIN ? html`<div class="callout callout-warn stale-note" role="alert"><b>Los datos de los satélites no se actualizan desde ${ago(lastIngest)}.</b>
       Que BRASA no muestre fuego no significa que no lo haya. Si ves humo o llamas, llama al <a href="tel:132"><b>132</b></a> o al <a href="tel:130"><b>130</b></a>.</div>` : '';
@@ -1092,10 +1115,10 @@ function paint(container) {
   // PROD-05: el plan de evacuación municipal de la comuna de cada lugar guardado (piloto: Quintero).
   const planes = [...new Map(places.map((p) => planMunicipal(p.comuna?.code)).filter(Boolean).map((pl) => [pl.url, pl])).values()];
   const planesBloque = planes.length ? html`<div class="card" style="margin-top:10px"><b class="small">Plan de evacuación de tu municipio</b>
-      ${planes.map((pl) => html`<p class="small" style="margin:6px 0 0"><a href="${pl.url}" target="_blank" rel="noopener">${pl.nombre} · ${pl.entidad} ↗</a></p>`)}
+      ${planes.map((pl) => html`<p class="small" style="margin:6px 0 0">${enl(pl.url, `${pl.nombre} · ${pl.entidad} ↗`)}</p>`)}
       <p class="tiny muted" style="margin-top:6px">Material de preparación: en una emergencia real mandan SENAPRED y el SAE. BRASA no verifica que esté vigente.</p></div>` : '';
-  container.querySelector('#zona-a').innerHTML = String(html`${hero}${staleNote}`);
-  container.querySelector('#zona-b').innerHTML = String(html`
+  q('#zona-a').innerHTML = String(html`${hero}${staleNote}`);
+  q('#zona-b').innerHTML = String(html`
     <p class="lede">${places.length ? dual('Lo que vieron los satélites cerca de cada lugar, el viento y cómo viene el clima.', 'Detecciones satelitales de las últimas 48 h dentro de 2× el radio, viento actual (Open-Meteo) e índice 30-30-30 diario por comuna.') : 'Guarda tu casa, tu parcela o la casa de tu familia. Te avisamos cuando un satélite vea calor cerca.'}</p>
     ${worst === 'urgente' ? html`<div class="callout callout-urgent"><b>Si la autoridad ordena evacuar, hazlo de inmediato.</b> Ante fuego o humo visible llama al <a href="tel:130"><b>130</b></a> o al <a href="tel:132"><b>132</b></a>. BRASA no reemplaza las alertas oficiales.</div>` : ''}
     ${cambiosBloque}
@@ -1115,45 +1138,42 @@ function paint(container) {
     <h2 class="section">Avisos ${channels ? html`<span class="tag tag-live">${[me.push && 'Push', me.telegram && 'Telegram'].filter(Boolean).join(' · ')}</span>` : ''}</h2>
     ${channels ? '' : html`<div class="callout callout-warn"><b>Aún no recibes avisos.</b> Actívalos y te avisaremos aunque no tengas BRASA abierta.</div>`}
     <div class="btn-row" style="margin-top:10px"><button class="btn ${channels ? '' : 'btn-blue'}" id="channels">${channels ? 'Cambiar cómo me avisan' : 'Activar avisos'}</button></div>
-    ${inbox.length ? html`<ul class="list" style="margin-top:10px">${inbox.slice(0, 8).map((a) => html`<li>
-        <span class="status-badge st-${a.level === 'urgente' ? 'urgente' : 'aviso'}">${a.level === 'urgente' ? 'Urgente' : 'Aviso'}</span>
+    ${inbox.length ? html`<ul class="list" style="margin-top:10px">${inbox.slice(0, 8).map((a) => {
+        const urgente = a.level === 'urgente';
+        return html`<li>
+        ${badge(urgente ? 'urgente' : 'aviso', urgente ? 'Urgente' : 'Aviso')}
         <div class="grow"><b class="small">${a.title}</b><div class="tiny muted">${fmtDateTime(a.created_at)} · ${a.observation?.satellite || ''}</div></div>
-        ${a.observation?.lat != null ? html`<button class="btn btn-sm btn-ghost" data-alert-id="${a.observation.id}" data-alert-lat="${a.observation.lat}" data-alert-lon="${a.observation.lon}" aria-label="Ver en el mapa: ${a.title}">Ver</button>` : ''}</li>`)}</ul>`
+        ${a.observation?.lat != null ? html`<button class="btn btn-sm btn-ghost" data-alert-id="${a.observation.id}" data-alert-lat="${a.observation.lat}" data-alert-lon="${a.observation.lon}" aria-label="Ver en el mapa: ${a.title}">Ver</button>` : ''}</li>`;
+      })}</ul>`
       : html`<p class="small muted" style="margin-top:10px">No hay avisos recientes.</p>`}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
     <p class="tiny muted" style="margin-top:14px">BRASA es un proyecto ciudadano. ${dual('Los satélites pueden tardar unos minutos u horas en ver un fuego, y a veces no lo ven (por nubes o humo). Si ves fuego, llama: no esperes a BRASA.', `Usa detecciones de NASA y NOAA, con latencia de minutos a horas, omisiones y falsos positivos. ${config && !config.firms_configured ? 'Sin clave NASA FIRMS en este servidor: solo GOES.' : ''}`)}</p>`);
 
-  container.querySelector('#cambios-cerrar')?.addEventListener('click', () => {
+  alClick(q('#cambios-cerrar'), () => {
     cambiosVisto = cambiosPrev?.at || true;
     storage.set('zona:cambios:visto', cambiosVisto);
     paint(container);
   });
-  container.querySelector('#add-place').addEventListener('click', () => placeForm());
+  alClick(q('#add-place'), () => placeForm());
   // MZ-10: «¿hay fuego cerca de mí?» sin guardar un lugar; el módulo se pide en diferido.
-  container.querySelector('#cerca-btn')?.addEventListener('click', async () => {
+  alClick(q('#cerca-btn'), async () => {
     const { abrirCerca } = await import('../cerca.js');
     abrirCerca();
   });
-  container.querySelector('#hero-what')?.addEventListener('click', () => {
-    const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
-    guidanceModal(worst, p);
-  });
-  const heroListen = container.querySelector('#hero-listen');
-  heroListen?.addEventListener('click', () => {
-    const p = places.find((x) => summaries.get(x.id)?.status === worst) || places[0];
-    speak(`${STATUS[worst].title}. ${statusText(worst, worstSummary?.cause)}. ${guidanceFor(worst, p.older_adult)[0]} No es una alerta oficial: sigue a SENAPRED.`, heroListen);
-  });
-  container.querySelector('#channels').addEventListener('click', alertChannels);
+  alClick(q('#hero-what'), () => guidanceModal(worst, worstPlace));
+  const heroListen = q('#hero-listen');
+  alClick(heroListen, () => speak(`${STATUS[worst].title}. ${statusText(worst, worstSummary?.cause)}. ${guidanceFor(worst, worstPlace.older_adult)[0]} No es una alerta oficial: sigue a SENAPRED.`, heroListen));
+  alClick(q('#channels'), alertChannels);
   // Tocar un día lo explica en palabras (en el teléfono no hay «pasar el puntero» para ver un title).
-  container.querySelectorAll('[data-daytip]').forEach((b) => b.addEventListener('click', () => toast(b.dataset.daytip, 'info', 7000)));
+  container.querySelectorAll('[data-daytip]').forEach((b) => alClick(b, () => toast(b.dataset.daytip, 'info', 7000)));
   if (!cambiosPrev?.at || Date.now() - Date.parse(cambiosPrev.at) > 30 * 60000) storage.set('zona:snapshot', cambiosAhora);
   // MAPA-162: bajar la hoja a peek antes de volar, si no el punto queda tapado bajo el panel.
   // MZ-08: si el punto sigue entre los focos cargados, «Ver» abre su ficha; si no, solo vuela.
-  container.querySelectorAll('[data-alert-lat]').forEach((b) => b.addEventListener('click', () => {
+  container.querySelectorAll('[data-alert-lat]').forEach((b) => alClick(b, () => {
     collapseSheet();
     const lat = Number(b.dataset.alertLat); const lon = Number(b.dataset.alertLon);
-    const obs = (store.get('observations') || []).find((o) => o.id === b.dataset.alertId);
+    const obs = obsDe(b.dataset.alertId);
     fly(lon, lat, 12);
     if (obs) popupFoco(obs, [lon, lat]);
   }));
@@ -1161,23 +1181,24 @@ function paint(container) {
     const place = places.find((p) => p.id === card.dataset.place);
     const summary = summaries.get(place.id);
     const failed = !summary || summary.error;
-    card.querySelector('[data-act="ver"]').addEventListener('click', () => { collapseSheet(); fly(place.lon, place.lat, place.radius_km > 15 ? 9.5 : 10.5); });
-    card.querySelector('[data-act="que-hacer"]').addEventListener('click', () => guidanceModal(summary?.status || 'tranquilo', place, failed));
-    card.querySelector('[data-act="reintentar"]')?.addEventListener('click', (ev) => retrySummary(container, place, ev.currentTarget));
-    card.querySelector('[data-act="servicios"]').addEventListener('click', () => showServices(place));
-    card.querySelector('[data-act="compartir"]').addEventListener('click', () => shareModal(place));
-    card.querySelector('[data-act="ics"]')?.addEventListener('click', () => {
+    const act = (n) => card.querySelector(`[data-act="${n}"]`);
+    alClick(act('ver'), () => { collapseSheet(); fly(place.lon, place.lat, zoomLugar(place)); });
+    alClick(act('que-hacer'), () => guidanceModal(summary?.status || 'tranquilo', place, failed));
+    alClick(act('reintentar'), (ev) => retrySummary(container, place, ev.currentTarget));
+    alClick(act('servicios'), () => showServices(place));
+    alClick(act('compartir'), () => shareModal(place));
+    alClick(act('ics'), () => {
       const comuna = summary?.comuna?.name || place.comuna?.name || 'tu comuna';
       download(`boton-rojo-${comuna.toLowerCase().replace(/\s+/g, '-')}.ics`,
         botonRojoIcs({ comuna, days: summary?.risk_days || [], url: location.origin }), 'text/calendar');
       toast('Listo: abre el archivo descargado para agregarlo a tu calendario.');
     });
-    card.querySelector('[data-act="editar"]').addEventListener('click', () => placeForm(place));
-    card.querySelector('[data-act="borrar"]').addEventListener('click', () => openModal(html`<h2 id="modal-title">¿Eliminar «${place.name}»?</h2>
+    alClick(act('editar'), () => placeForm(place));
+    alClick(act('borrar'), () => openModal(html`<h2 id="modal-title">¿Eliminar «${place.name}»?</h2>
       <p class="muted">Dejarás de recibir alertas para este lugar.</p><div class="btn-row"><button class="btn btn-danger" id="confirm-del">Eliminar</button><button class="btn btn-ghost" id="cancel-del">Cancelar</button></div>`, (body) => {
-      body.querySelector('#cancel-del').addEventListener('click', closeModal);
-      body.querySelector('#confirm-del').addEventListener('click', async () => {
-        try { await api.deletePlace(place.id); closeModal(); document.dispatchEvent(new CustomEvent('brasa:places-changed')); } catch (err) { toast(err.message, 'error'); }
+      alSel(body, '#cancel-del', closeModal);
+      alSel(body, '#confirm-del', async () => {
+        try { await api.deletePlace(place.id); closeModal(); avisoPlaces(); } catch (err) { toast(err.message, 'error'); }
       });
     }));
   });
@@ -1190,16 +1211,14 @@ function paint(container) {
  * faltantes (tope 78 %) para dejar el mapa visible arriba. */
 let hojaPortadaRaf = 0;
 export function ajustarHojaPortada(container, { activo = () => mounted } = {}) {
-  if (!activo() || window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'half') return;
-  if ((store.get('places') || []).length) return;
-  const boton = container?.querySelector('#add-place');
-  const tabbar = document.querySelector('.tabbar');
-  if (!boton || !tabbar) return;
+  // Condiciones que pueden cambiar entre el agendado y el cuadro: se revalidan dentro.
+  const vigente = () => activo() && window.innerWidth < 900
+    && document.documentElement.dataset.sheet === 'half' && !lugares().length;
+  if (!vigente() || !container?.querySelector('#add-place') || !document.querySelector('.tabbar')) return;
   if (hojaPortadaRaf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(hojaPortadaRaf);
   const aplicar = () => {
     hojaPortadaRaf = 0;
-    if (!activo() || window.innerWidth >= 900 || document.documentElement.dataset.sheet !== 'half') return;
-    if ((store.get('places') || []).length) return;
+    if (!vigente()) return;
     const b = container?.querySelector('#add-place');
     const t = document.querySelector('.tabbar');
     if (!b || !t) return;
@@ -1217,19 +1236,14 @@ export function ajustarHojaPortada(container, { activo = () => mounted } = {}) {
 }
 
 function frame() {
-  const places = store.get('places') || [];
+  const places = lugares();
   if (!places.length) return fitBbox([-75.5, -45, -66.5, -18], 30);
   const lats = places.map((p) => p.lat); const lons = places.map((p) => p.lon);
   const pad = 0.18;
   fitBbox([Math.min(...lons) - pad, Math.min(...lats) - pad, Math.max(...lons) + pad, Math.max(...lats) + pad], 60);
 }
 
-let offPlaces = null;
-let offStatus = null;
-let offObs = null;
-let offText = null;
-let offDetail = null;
-let offConfig = null;
+const subs = {}; // desuscripciones de store.on (se sueltan todas en unmount)
 let onVis = null;
 let onResize = null;
 export default {
@@ -1262,20 +1276,22 @@ export default {
     else onReady(aplicar);
     // Las suscripciones van antes del primer render: la portada se monta sin esperar las
     // cargas iniciales y nada de lo que llegue durante el montaje queda sin repintado.
-    offPlaces = store.on('places', async () => { if (mounted) { syncTitulo(container); await render(container); frame(); } });
+    subs.places = store.on('places', async () => { if (mounted) { syncTitulo(container); await render(container); frame(); } });
     // PERF-13: antes de que lleguen los lugares estos repintados pintarían el estado
     // vacío; el primer render real lo dispara el evento 'places' del arranque.
-    offStatus = store.on('status', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
     // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
     // 'observations' solo cambia con un corte nuevo) y al volver a la app.
-    offObs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
-    offText = store.on('text', () => ajustarHojaPortada(container));
-    offDetail = store.on('detail', () => ajustarHojaPortada(container));
     // REND-02: la nota de FIRMS del pie depende de la configuración, que puede llegar
     // después del primer pintado; el repintado es el mismo que ya usan los demás datos.
-    offConfig?.();
-    offConfig = store.on('config', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
-    onVis = () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'volver'); };
+    const siListo = (fn) => () => { if (mounted && store.get('placesReady')) fn(container); };
+    subs.status = store.on('status', siListo(repinta));
+    subs.obs = store.on('observations', siListo((c) => maybeRefresh(c, 'focos')));
+    const ajustarHoja = () => ajustarHojaPortada(container);
+    subs.text = store.on('text', ajustarHoja);
+    subs.detail = store.on('detail', ajustarHoja);
+    subs.config?.();
+    subs.config = store.on('config', siListo(repinta));
+    onVis = siListo((c) => maybeRefresh(c, 'volver'));
     onResize = () => ajustarHojaPortada(container);
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('resize', onResize);
@@ -1288,16 +1304,7 @@ export default {
     turno += 1;
     stopSpeak();
     document.documentElement.classList.remove('emergency-on');
-    offPlaces?.();
-    offStatus?.();
-    offObs?.();
-    offObs = null;
-    offText?.();
-    offText = null;
-    offDetail?.();
-    offDetail = null;
-    offConfig?.();
-    offConfig = null;
+    for (const k in subs) { subs[k]?.(); delete subs[k]; }
     if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
     if (onResize) { window.removeEventListener('resize', onResize); onResize = null; }
     soltarToques.forEach((s) => s());
