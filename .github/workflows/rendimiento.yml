@@ -20,6 +20,9 @@ on:
         description: "Incluir red lenta, CPU limitada y caché caliente/offline"
         type: boolean
         default: true
+      retraso_config_ms:
+        description: "Retraso idéntico de /api/config en milisegundos (0 a 10000)"
+        default: "0"
 
 permissions:
   contents: read
@@ -38,16 +41,22 @@ jobs:
       - id: matrix
         env:
           COMPLETA: ${{ github.event_name == 'workflow_dispatch' && inputs.completa }}
+          EVENTO: ${{ github.event_name }}
+          RETRASO_CONFIG_MS: ${{ inputs.retraso_config_ms || '0' }}
         run: |
           python - <<'PY'
           import itertools, json, os
           full = os.environ["COMPLETA"] == "true"
+          delay = int(os.environ["RETRASO_CONFIG_MS"])
+          if not 0 <= delay <= 10000:
+              raise ValueError("retraso_config_ms debe estar entre 0 y 10000")
           profiles = [
-              {"device": d, "network": n, "cpu": c}
-              for d, n, c in itertools.product(
+              {"device": d, "network": n, "cpu": c, "config_ms": ms}
+              for d, n, c, ms in itertools.product(
                   ["movil", "escritorio"],
                   ["normal", "lenta"] if full else ["normal"],
                   [1, 4] if full else [1],
+                  [0, 3000] if os.environ["EVENTO"] == "pull_request" else [delay],
               )
           ]
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
@@ -89,6 +98,7 @@ jobs:
         run: |
           python -m pip install -r candidate/requirements-e2e.txt
           python -m ruff check candidate/scripts/local/medir_rendimiento.py candidate/scripts/local/comparar_rendimiento.py candidate/scripts/local/benchmark_api.py candidate/scripts/local/perf_server.py candidate/scripts/local/ejecutar_rendimiento_ci.py
+          python -m ruff check candidate/scripts/local/config_check.py
           python -m playwright install --with-deps chromium
           mkdir -p reports
           python -m pip freeze > reports/dependencias.txt
@@ -126,12 +136,14 @@ jobs:
           NETWORK: ${{ matrix.network }}
           CPU: ${{ matrix.cpu }}
           CACHE: ${{ needs.escenarios.outputs.cache }}
+          CONFIG_MS: ${{ matrix.config_ms }}
         run: |
           python candidate/scripts/local/ejecutar_rendimiento_ci.py \
             --base-repo "$GITHUB_WORKSPACE/base" \
             --candidate-repo "$GITHUB_WORKSPACE/candidate" \
             --out "$GITHUB_WORKSPACE/reports/browser" \
-            --device "$DEVICE" --network "$NETWORK" --cpu "$CPU" --cache "$CACHE"
+            --device "$DEVICE" --network "$NETWORK" --cpu "$CPU" --cache "$CACHE" \
+            --retraso-config-ms "$CONFIG_MS" --verificar-config
       - name: Resumen técnico
         if: always()
         run: |
@@ -139,6 +151,9 @@ jobs:
           echo 'Los escenarios no ejercidos y las muestras fallidas no cuentan como aceptación.' >> "$GITHUB_STEP_SUMMARY"
           if [ -f reports/browser/comparacion.md ]; then
             cat reports/browser/comparacion.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f reports/browser/config/config.md ]; then
+            cat reports/browser/config/config.md >> "$GITHUB_STEP_SUMMARY"
           fi
           for f in reports/peso-base.txt reports/peso-candidate.txt; do
             if [ -f "$f" ]; then
@@ -150,7 +165,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: rendimiento-${{ matrix.device }}-${{ matrix.network }}-cpu${{ matrix.cpu }}
+          name: rendimiento-${{ matrix.device }}-${{ matrix.network }}-cpu${{ matrix.cpu }}-config${{ matrix.config_ms }}
           path: reports/
 
   api:

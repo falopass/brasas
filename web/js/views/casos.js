@@ -2,6 +2,7 @@
  * Un solo reloj (índice horario) sincroniza el mapa 2D, la vista 3D, los gráficos y la lista de eventos. */
 import { api, request } from '../api.js';
 import { comunaDePunto } from '../buscador.js';
+import { esperarConfig } from '../config.js';
 import { timeChart } from '../charts.js';
 import { errorConSalida } from '../errores.js';
 import { fitBbox, fly, goesCaseGeoJSON, onReady, setData, setGibsEscena, show } from '../map.js';
@@ -9,6 +10,7 @@ import { codeDeComuna, filterNominados, sumHa } from '../nominados.js';
 import { escenaCaso } from '../gibs.js';
 import { sliderUrl, worldviewLayer, worldviewUrl } from '../satelite.js';
 import { store } from '../store.js';
+import { reenfocar } from '../ui.js';
 import { $, dual, fmtDay, fmtNum, haversineKm, html, raw, todayChile, TZ, TZ_LABEL, toast } from '../util.js';
 
 const EMPTY = { type: 'FeatureCollection', features: [] };
@@ -18,6 +20,7 @@ const TRAIL_HOURS = 6;
 
 let mounted = false;
 let S = null; // estado del caso abierto
+let offConfig = null; // baja de la suscripción a la configuración (REND-02)
 
 /** Cada momento clave en palabras sencillas; la etiqueta técnica del servidor queda para la lectura detallada. */
 function plainEvent(e) {
@@ -585,7 +588,11 @@ async function toggle3D() {
     const mod = await import('../globe.js');
     globeEl.hidden = false;
     const mine = S;
-    const info = await mod.openGlobe(globeEl, { ionToken: store.get('config')?.ion_public_token, camera: S.case.camera });
+    // El token de relieve viaja en la configuración, que puede seguir de camino (REND-02):
+    // espera acotada; sin él la esfera abre igual, solo que sin relieve real.
+    const cfg = await esperarConfig({ timeoutMs: 3000 });
+    if (S !== mine || !S) { globeEl.hidden = true; return; }
+    const info = await mod.openGlobe(globeEl, { ionToken: cfg?.ion_public_token, camera: S.case.camera });
     if (S !== mine || !S) { globeEl.hidden = true; return; }
     S.globe = mod;
     mod.setGlobeRendering(true);
@@ -626,10 +633,55 @@ export function sinReconstruccion(timeline, detecciones) {
   return !detecciones && !timeline?.frames?.length && !timeline?.events?.length;
 }
 
+/** REND-02: la configuración puede llegar con un caso abierto. De ella dependen solo el
+ *  botón FIRMS y sus notas, en el caso con y sin reconstrucción: se actualizan en el
+ *  lugar, sin reconstruir nada (el cursor, la reproducción y el gráfico quedan como
+ *  estaban). Idempotente: puede correr con cada actualización de la configuración. */
+function aplicarConfigEnCaso(cfg, estado) {
+  const host = estado?.container;
+  if (!host) return;
+  const firms = Boolean(cfg?.firms_configured);
+  const sinFirms = Boolean(cfg) && !firms;
+  const nota = host.querySelector('#polar-nota');
+  if (nota) {
+    // Caso sin reconstrucción: la nota dice si el servidor puede sumar FIRMS y el botón
+    // aparece recién con la clave (mientras no se sabe, no miente ni muestra botón).
+    const c = estado.case;
+    nota.innerHTML = String(html` ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ''}${sinFirms ? ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.' : ''}`);
+    const fila = host.querySelector('#polar-fila');
+    if (fila) {
+      const foco = fila.contains(document.activeElement);
+      fila.innerHTML = String(firms ? html`<button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button>` : '');
+      fila.hidden = !firms;
+      fila.querySelector('#polar')?.addEventListener('click', () => loadPolar(true));
+      // El botón enfocado pudo desaparecer (la clave FIRMS se apagó): el foco no cae al
+      // documento — va al botón nuevo o a la nota asociada, que es focusable (tabindex=-1).
+      if (foco) reenfocar(fila.querySelector('#polar') || nota, host, nota);
+    }
+    return;
+  }
+  // Caso con reconstrucción: el botón FIRMS se habilita solo con la clave del servidor.
+  const polar = host.querySelector('#polar');
+  if (polar) {
+    const eraFoco = document.activeElement === polar;
+    polar.disabled = !firms;
+    polar.title = firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor';
+    // Deshabilitar el botón enfocado suelta el foco al documento: se mueve a la nota
+    // asociada (tabindex=-1) o al siguiente control visible.
+    if (eraFoco && polar.disabled) reenfocar(host.querySelector('#polar-hint'), host, polar);
+  }
+  const hint = host.querySelector('#polar-hint');
+  if (hint) hint.textContent = firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : '';
+}
+
 function renderCase(container, keepIndex = false) {
   const c = S.case;
   const tl = S.timeline;
-  const firms = store.get('config')?.firms_configured;
+  const config = store.get('config');
+  const firms = config?.firms_configured;
+  // Mientras la configuración no llega no se sabe si el servidor tiene clave FIRMS (REND-02):
+  // la nota de «sin acceso» solo aparece cuando se sabe que no hay clave.
+  const sinFirms = Boolean(config) && !firms;
   const detections = S.goes.length + S.polarCount;
   const sinDatos = sinReconstruccion(tl, detections);
   container.innerHTML = String(html`
@@ -637,8 +689,8 @@ function renderCase(container, keepIndex = false) {
     ${sinDatos ? html`<p class="lede">${c.subtitle} · ${fmtDay(c.start_utc.slice(0, 10))} → ${fmtDay(c.end_utc.slice(0, 10))}${c.scope ? ` · ${SCOPE[c.scope].toLowerCase()}` : ''}</p>
     <div class="callout c-nota">
       <b>Este caso no tiene reconstrucción satelital cargada.</b>
-      <span class="small"> ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.'}</span>
-      ${firms ? html`<div class="btn-row"><button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button></div>` : ''}
+      <span class="small" id="polar-nota" tabindex="-1"> ${c.goes_note || 'No hay archivo GOES ni detecciones VIIRS/MODIS para este caso.'}${firms ? ' Puedes sumar las detecciones VIIRS/MODIS del archivo de NASA FIRMS con el botón.' : ''}${sinFirms ? ' Este servidor no tiene acceso al archivo de NASA FIRMS, así que no puede sumar VIIRS ni MODIS.' : ''}</span>
+      <div class="btn-row" id="polar-fila" ${firms ? '' : 'hidden'}>${firms ? html`<button class="btn btn-sm" id="polar">Sumar VIIRS/MODIS (FIRMS)</button>` : ''}</div>
     </div>` : html`
     <div class="player" role="group" aria-label="Reproductor de la reconstrucción">
       <div class="player-time"><span><strong id="pl-time"></strong><span class="tiny x-tech" id="pl-utc"></span></span>
@@ -671,7 +723,7 @@ function renderCase(container, keepIndex = false) {
     ${tl.events.length ? html`<ul class="list event-list">${tl.events.map((e, i) => html`<li tabindex="0" data-event="${i}">
       <span class="ev-icon ev-${e.kind}" aria-hidden="true"></span>
       <span class="grow"><span class="event-time">${shortTime(utcDate(e.t))}</span><span class="small">${dual(plainEvent(e), e.label)}</span></span></li>`)}</ul>`
-      : html`<p class="small muted">${c.goes_note || 'Sin detecciones para derivar eventos.'} ${firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : ''}</p>`}
+      : html`<p class="small muted">${c.goes_note || 'Sin detecciones para derivar eventos.'} <span id="polar-hint" tabindex="-1">${firms ? 'Agrega VIIRS/MODIS para completar la reconstrucción.' : ''}</span></p>`}
     ${sinDatos ? '' : html`<h2 class="section">En el mapa</h2>
     <div class="switch-row"><div class="grow"><b class="small">${dual('Mostrar la zona con calor', 'Huella acumulada')}</b><div class="tiny muted">${dual('Todo lo que los satélites vieron caliente hasta esa hora. Es aproximada.', tl.footprint_note)}</div></div>
       <label class="switch"><input type="checkbox" id="l-foot" aria-label="Mostrar la zona con calor" ${S.showFootprint ? 'checked' : ''} /><span></span></label></div>
@@ -682,7 +734,7 @@ function renderCase(container, keepIndex = false) {
     <div class="x-tech"><div class="btn-row" style="margin-top:12px">
       <label class="btn btn-sm" for="perimeter">⬡ Importar perímetro CONAF (GeoJSON)</label>
       <input type="file" id="perimeter" accept=".geojson,.json,application/geo+json,application/json" hidden />
-      <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : 'Requiere FIRMS_MAP_KEY en el servidor'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} cargadas` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
+      <button class="btn btn-sm" id="polar" ${firms ? '' : 'disabled'} title="${firms ? '' : sinFirms ? 'Requiere FIRMS_MAP_KEY en el servidor' : 'Comprobando la clave FIRMS del servidor…'}">${S.polar.length ? `VIIRS/MODIS: ${fmtNum(S.polar.length)} cargadas` : 'Sumar VIIRS/MODIS (FIRMS)'}</button>
     </div>
     <p class="tiny muted" style="margin-top:6px">El perímetro de IDE Minagri viene en UTM: conviértelo antes con <code>scripts/convert_conaf.py</code>. Se muestra como estado final, no como avance.</p></div>`}
     ${gibsEscenaHtml(c)}
@@ -782,6 +834,14 @@ export default {
   async mount(container, { rest }) {
     mounted = true;
     openSeq++; // invalida cualquier caso que aún esté cargando (por ejemplo, al volver al catálogo)
+    // REND-02: la configuración puede llegar con un caso ya abierto; el botón FIRMS y sus
+    // notas se actualizan en el lugar, sin reconstruir el reproductor. La baja previa evita
+    // que un remontaje sin unmount (volver del caso al catálogo) acumule suscripciones.
+    offConfig?.();
+    offConfig = store.on('config', (cfg) => {
+      if (!mounted || !S) return;
+      aplicarConfigEnCaso(cfg, S);
+    });
     setGibsEscena(null);
     stopPlayback();
     S?.chart?.destroy();
@@ -799,6 +859,8 @@ export default {
   unmount() {
     mounted = false;
     openSeq++;
+    offConfig?.();
+    offConfig = null;
     setGibsEscena(null);
     stopPlayback();
     S?.chart?.destroy();

@@ -243,6 +243,33 @@ describe('request: auth y reintento ante 401', () => {
   });
 });
 
+describe('createReport: el reporte sale aunque falle el alta del dispositivo', () => {
+  // REND-02: el alta anónima automática puede chocar con el límite por IP (429); un reporte
+  // de incendio no puede quedarse en la cola por eso: el servidor lo acepta sin autor.
+  test('429 en /api/subscribers → el reporte se envía igual, sin autor', async () => {
+    responses.push(jsonRes(429, { detail: 'Demasiadas altas desde tu red' }, { 'Retry-After': '60' }));
+    responses.push(jsonRes(200, { ok: true }));
+    const out = await api.createReport({});
+    assert.deepEqual(out, { ok: true });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].url, '/api/subscribers');
+    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls[1].url, '/api/reports');
+    assert.equal(calls[1].init.method, 'POST');
+    assert.ok(!calls[1].init.headers['X-Brasa-Token'], 'sin alta no via cabecera de autor');
+    assert.equal(storage.get('token'), null); // el fallo no guarda ningún token
+  });
+
+  test('con token guardado el reporte no vuelve a dar de alta el dispositivo', async () => {
+    storage.set('token', 'tok-reporte');
+    responses.push(jsonRes(200, { ok: true }));
+    await api.createReport({});
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, '/api/reports');
+    assert.equal(calls[0].init.headers['X-Brasa-Token'], 'tok-reporte');
+  });
+});
+
 describe('request: reintento de GET tras 429', () => {
   test('espera corta → repite una vez y devuelve el resultado', async () => {
     responses.push(jsonRes(429, {}, { 'Retry-After': '0' }));
@@ -310,6 +337,49 @@ describe('request: reintento de lectura tras microcorte', () => {
     responses.push(new TypeError('fetch failed'));
     await request('/api/x', { signal: ctrl.signal }).catch(() => {});
     assert.equal(calls.length, 1);
+  });
+});
+
+describe('request con withMeta y api.config: la marca de caché del service worker (REND-02)', () => {
+  const FECHA_SW = '2026-11-25T12:00:00-03:00';
+
+  test('withMeta:true devuelve {body, cachedAt} con la cabecera X-Brasa-Cached-At', async () => {
+    responses.push(jsonRes(200, { zones: { norte: { bbox: [1, 2, 3, 4] } } }, { 'X-Brasa-Cached-At': FECHA_SW }));
+    const r = await request('/api/config', { withMeta: true });
+    assert.deepEqual(r.body, { zones: { norte: { bbox: [1, 2, 3, 4] } } });
+    assert.equal(r.cachedAt, FECHA_SW); // la copia que sirvió el service worker, con su fecha
+  });
+
+  test('withMeta:true sin la cabecera: cachedAt null (la respuesta vino de la red)', async () => {
+    responses.push(jsonRes(200, { ok: 1 }));
+    const r = await request('/api/config', { withMeta: true });
+    assert.deepEqual(r.body, { ok: 1 });
+    assert.equal(r.cachedAt, null);
+  });
+
+  test('sin withMeta nada cambia: el cuerpo tal cual, aunque el SW mande la marca', async () => {
+    responses.push(jsonRes(200, { ok: 2 }, { 'X-Brasa-Cached-At': FECHA_SW }));
+    assert.deepEqual(await request('/api/config'), { ok: 2 }); // los demás llamadores no cambian
+  });
+
+  test('api.config: los campos de siempre en la raíz, más cached_at con la marca del SW', async () => {
+    responses.push(jsonRes(200, { turnstile_site_key: 'k', push: { public_key: 'p' } }, { 'X-Brasa-Cached-At': FECHA_SW }));
+    const cfg = await api.config();
+    assert.equal(cfg.turnstile_site_key, 'k');
+    assert.equal(cfg.push.public_key, 'p');
+    assert.equal(cfg.cached_at, FECHA_SW);
+  });
+
+  test('api.config sin marca del SW: cached_at null (respuesta de red, no copia guardada)', async () => {
+    responses.push(jsonRes(200, { telegram: { enabled: false } }));
+    const cfg = await api.config();
+    assert.equal(cfg.telegram.enabled, false);
+    assert.equal(cfg.cached_at, null);
+  });
+
+  test('api.config con cuerpo ilegible no revienta: solo queda cached_at', async () => {
+    responses.push(new Response('{{{', { status: 200, headers: { 'content-type': 'application/json', 'X-Brasa-Cached-At': FECHA_SW } }));
+    assert.deepEqual(await api.config(), { cached_at: FECHA_SW });
   });
 });
 

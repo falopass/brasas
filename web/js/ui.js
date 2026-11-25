@@ -1,8 +1,9 @@
 /* Componentes de interfaz compartidos: modal, emergencias, alta de lugares, reportes y canales de alerta. */
 import { api, request } from './api.js';
+import { esperarConfig } from './config.js';
 import { fitDimensions, shouldShrink } from './foto.js';
 import { fitBbox, getMap, setData } from './map.js';
-import { disablePush, enablePush, pushState } from './push.js';
+import { disablePush, enablePush, pedirPermisoPush, pushState } from './push.js';
 import { caducado, cercanos, descartar, distancia, FOCOS_HORAS, FOCOS_KM, guardar, latest, line, marcarEnviado, pendientes, resumenCercanos, resumenFocos, testigos } from './reportes.js';
 import { store } from './store.js';
 import { $, dual, html, raw, storage, toast } from './util.js';
@@ -10,6 +11,7 @@ import { $, dual, html, raw, storage, toast } from './util.js';
 export function openModal(fragment, onMount) {
   const dialog = $('#modal');
   const body = $('#modal-body');
+  generacionModal += 1; // este contenido es una generación nueva: invalida los refrescos de la anterior
   const wasOpen = dialog.open;
   // Al repintar un modal abierto, el control enfocado desaparece del DOM y el foco cae al <body>:
   // se guarda un identificador estable (id o el primer atributo data-*), como hace keepPlace().
@@ -27,6 +29,47 @@ export function openModal(fragment, onMount) {
   return dialog;
 }
 export const closeModal = () => $('#modal').open && $('#modal').close();
+
+// Generación del modal (UX/seg): openModal la cambia, y el evento `close` del diálogo también
+// (Escape cierra sin pasar por closeModal). Un refresco que nace de un modal vivo (por ejemplo
+// alertChannels tras activar push) captura la generación y la revalida tras cada await: si la
+// persona cerró o abrió otro modal mientras tanto, el refresco no reabre nada ni roba el foco.
+let generacionModal = 0;
+$('#modal').addEventListener('close', () => { generacionModal += 1; });
+
+/** Suscripción a la configuración mientras vive el modal actual (REND-02): la configuración
+ *  puede llegar después de abierto el modal. Se limpia sola cuando el modal se cierra o se
+ *  repinta (openModal vacía #modal-body), así ningún listener queda suelto ni toca un DOM
+ *  que ya no existe. El callback recibe (cfg, vive): `vive()` revalida el modal —un callback
+ *  asíncrono debe llamarla tras cada await antes de mutar el DOM o pedir un permiso—.
+ *  Devuelve la función de baja manual, por si el llamador la necesita. */
+function configEnModal(alLlegar) {
+  const dialog = $('#modal');
+  const body = $('#modal-body');
+  const marca = document.createComment('brasa:config');
+  body.appendChild(marca);
+  const vive = () => dialog.open && marca.isConnected;
+  const off = store.on('config', (cfg) => {
+    if (!vive()) { off(); dialog.removeEventListener('close', off); return; }
+    alLlegar(cfg, vive);
+  });
+  dialog.addEventListener('close', off, { once: true });
+  return () => { off(); dialog.removeEventListener('close', off); };
+}
+
+/** Cuando un repintado elimina o deshabilita el control enfocado, el foco no debe caer al
+ *  documento (accesibilidad): va a `preferido` si existe, es visible y no está deshabilitado
+ *  —puede ser la nota asociada, focusable con tabindex="-1"—, o al siguiente control visible
+ *  enfocable a partir de `referencia` en el orden del DOM, con vuelta al inicio del `alcance`.
+ *  Nada ocurre si no hay ningún control enfocable. */
+export function reenfocar(preferido, alcance, referencia) {
+  const visible = (el) => el && !el.hidden && el.offsetParent !== null;
+  if (visible(preferido) && preferido.disabled !== true) { preferido.focus({ preventScroll: true }); return; }
+  const control = (el) => visible(el) && el.tabIndex >= 0 && el.disabled !== true;
+  const orden = [...alcance.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')];
+  const desde = referencia ? orden.findIndex((el) => referencia.contains(el)) : -1;
+  [...orden.slice(desde + 1), ...orden.slice(0, Math.max(0, desde))].find(control)?.focus({ preventScroll: true });
+}
 
 export const PHONES = [
   { n: '130', label: 'CONAF · incendios forestales', primary: true },
@@ -376,7 +419,7 @@ function openAlertTest() {
           result.hidden = false;
           result.innerHTML = String(html`No se pudo entregar la prueba. Activa los avisos y vuelve a probar.
             <div class="btn-row" style="margin-top:8px"><button class="btn btn-sm" id="at-channels" type="button">Activar avisos</button></div>`);
-          result.querySelector('#at-channels').addEventListener('click', alertChannels);
+          result.querySelector('#at-channels').addEventListener('click', () => alertChannels());
         }
       } catch (err) {
         result.hidden = false;
@@ -390,11 +433,29 @@ function openAlertTest() {
 }
 
 // ------------------------------------------------------------------ canales de alerta
-export async function alertChannels() {
-  const config = store.get('config');
+export async function alertChannels({ generacion } = {}) {
+  // Solo un número es una generación válida: cualquier otra cosa (el evento de un click, por
+  // ejemplo) cuenta como apertura pedida por la persona y abre igual que siempre. Un
+  // refresco con generación solo abre si esa sigue siendo la del modal en pantalla.
+  const vale = () => generacion == null || (typeof generacion === 'number' && generacion === generacionModal);
+  let config = store.get('config');
   let me = { push: false, telegram: false };
   try { me = await api.me(); } catch { /* sin token aún */ }
+  if (!vale()) return; // cerró o cambió de modal durante la lectura de tus datos
   const push = await pushState();
+  if (!vale()) return; // revalidación final, justo antes de abrir
+  // La tarjeta de Telegram es la única pieza del modal que depende de la configuración,
+  // que puede llegar después de abierta (arranque sin caché, REND-02): se repinta sola.
+  const telegramCard = () => html`
+    <div class="card" id="ch-telegram-card">
+      <div class="card-head"><div><div class="card-title">Telegram</div>
+        <div class="card-sub">${config?.telegram?.enabled ? 'Recibe las alertas en Telegram, aunque no tengas BRASA abierta.' : config ? 'Este servidor aún no tiene un bot de Telegram configurado.' : 'Comprobando si este servidor tiene un bot de Telegram…'}</div></div>
+        <span class="tag ${me.telegram ? 'tag-live' : ''}">${me.telegram ? 'Vinculado' : 'No vinculado'}</span></div>
+      <div class="card-actions">${config?.telegram?.enabled ? html`<button class="btn btn-sm" id="ch-telegram">${me.telegram ? 'Volver a vincular' : 'Vincular Telegram'}</button>` : ''}</div>
+    </div>`;
+  const vincularTelegram = (body) => body.querySelector('#ch-telegram')?.addEventListener('click', async () => {
+    try { const { url } = await api.telegramLink(); window.open(url, '_blank', 'noopener'); toast('Abre el bot y pulsa «Iniciar» para terminar.'); } catch (err) { toast(err.message, 'error'); }
+  });
   openModal(html`
     <h2 id="modal-title">Recibir alertas</h2>
     <p class="muted small">Te avisamos aunque no tengas BRASA abierta, cuando un satélite vea calor cerca de tus lugares. Si además el viento va desde ese punto hacia ti, el aviso dice <b>URGENTE</b>.</p>
@@ -405,27 +466,65 @@ export async function alertChannels() {
       <div class="card-actions">${push.supported ? html`<button class="btn btn-sm btn-primary" id="ch-push">${me.push ? 'Reactivar' : 'Activar avisos'}</button>${me.push ? html`<button class="btn btn-sm btn-ghost" id="ch-push-off">Desactivar avisos</button>` : ''}` : ''}</div>
     </div>
     ${installGuideFold('Cómo activar los avisos en tu teléfono', 'margin:8px 0')}
-    <div class="card">
-      <div class="card-head"><div><div class="card-title">Telegram</div>
-        <div class="card-sub">${config?.telegram?.enabled ? 'Recibe las alertas en Telegram, aunque no tengas BRASA abierta.' : 'Este servidor aún no tiene un bot de Telegram configurado.'}</div></div>
-        <span class="tag ${me.telegram ? 'tag-live' : ''}">${me.telegram ? 'Vinculado' : 'No vinculado'}</span></div>
-      <div class="card-actions">${config?.telegram?.enabled ? html`<button class="btn btn-sm" id="ch-telegram">${me.telegram ? 'Volver a vincular' : 'Vincular Telegram'}</button>` : ''}</div>
-    </div>
+    ${telegramCard()}
     <div class="btn-row" style="margin-top:14px">
       <button class="btn btn-sm btn-ghost" id="ch-test" ${me.push || me.telegram ? '' : raw('disabled')}>Enviar alerta de prueba</button>
     </div>
     <p class="tiny muted" style="margin-top:12px">BRASA no reemplaza los mensajes de emergencia oficiales que llegan a tu celular (SAE de SENAPRED): mantenlos activos.</p>`, (body) => {
-    body.querySelector('#ch-push')?.addEventListener('click', async () => {
-      try { await enablePush(config.push.public_key); toast('Notificaciones activadas.'); alertChannels(); } catch (err) { toast(err.message, 'error'); }
+    // Generación de este modal (UX/seg): Escape o un repintado durante una espera (la
+    // configuración, la suscripción de push) invalidan lo que sigue vivo aquí. El alta o
+    // la baja terminan en el servidor igual; lo que no se hace es reabrir «Recibir alertas»
+    // ni tocar un modal que ya fue reemplazado — el foco no se roba.
+    const dialog = $('#modal');
+    const miGeneracion = generacionModal;
+    const marca = document.createComment('brasa:alertas');
+    body.appendChild(marca);
+    const viva = () => dialog.open && marca.isConnected;
+    vincularTelegram(body);
+    body.querySelector('#ch-push')?.addEventListener('click', async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        // Safari solo muestra el pedido de permisos con el gesto del clic vivo: se pide
+        // ANTES de cualquier await —la configuración puede seguir de camino (REND-02)—.
+        // Con permiso ya otorgado o bloqueado no se vuelve a preguntar.
+        const { problema, permiso } = pedirPermisoPush();
+        if (problema) { toast(`${problema.title}: ${problema.help}`, 'error'); return; }
+        const key = (await esperarConfig({ fresca: true }))?.push?.public_key;
+        if (!key) {
+          toast('No se pudo activar los avisos: la configuración del servidor no llegó. Vuelve a intentarlo en unos segundos.', 'error');
+          return;
+        }
+        // El alta termina en el servidor aunque el modal ya no esté: solo se refresca la
+        // ventana si esta generación sigue viva (y el refresco revalida su propia generación).
+        await enablePush(key, { permiso });
+        toast('Notificaciones activadas.');
+        if (viva()) alertChannels({ generacion: miGeneracion });
+      } catch (err) { toast(err.message, 'error'); }
+      finally { btn.disabled = false; }
     });
     body.querySelector('#ch-push-off')?.addEventListener('click', async () => {
-      try { await disablePush(); toast('Avisos desactivados en este teléfono.'); alertChannels(); } catch (err) { toast(err.message, 'error'); }
-    });
-    body.querySelector('#ch-telegram')?.addEventListener('click', async () => {
-      try { const { url } = await api.telegramLink(); window.open(url, '_blank', 'noopener'); toast('Abre el bot y pulsa «Iniciar» para terminar.'); } catch (err) { toast(err.message, 'error'); }
+      try {
+        await disablePush();
+        toast('Avisos desactivados en este teléfono.');
+        if (viva()) alertChannels({ generacion: miGeneracion });
+      } catch (err) { toast(err.message, 'error'); }
     });
     body.querySelector('#ch-test')?.addEventListener('click', async () => {
       try { const { channels } = await api.testAlert(); toast(channels.length ? `Prueba enviada por: ${channels.join(', ')}.` : 'No se pudo entregar la prueba. Revisa los canales.', channels.length ? 'info' : 'error'); } catch (err) { toast(err.message, 'error'); }
+    });
+    // Configuración tardía (REND-02): solo la tarjeta de Telegram cambia y se repinta
+    // sola, sin tocar el resto del modal ni perder el foco si estaba en sus botones.
+    configEnModal((cfg) => {
+      config = cfg;
+      const vieja = body.querySelector('#ch-telegram-card');
+      if (!vieja) return;
+      const focoDentro = vieja.contains(document.activeElement);
+      vieja.outerHTML = String(telegramCard());
+      vincularTelegram(body);
+      // El control enfocado pudo desaparecer (la configuración deshabilita Telegram): el
+      // foco no cae al documento — va al botón nuevo o al siguiente control visible.
+      if (focoDentro) reenfocar(body.querySelector('#ch-telegram'), body, body.querySelector('#ch-telegram-card'));
     });
   });
 }
@@ -447,6 +546,18 @@ function ensureTurnstile() {
   return turnstileScript;
 }
 
+/* Widget Turnstile montado en el formulario de reportes (seg): una sola promesa de montaje
+   por formulario y clave; se retira al cerrar el modal o al abrir una generación nueva del
+   formulario, y se recrea si la clave llega distinta. Sin esto, cada repintado dejaba un
+   widget huérfano y la llegada tardía de la configuración montaba uno doble. */
+let widgetFormulario = null; // { id, ts } del widget vivo, o null
+
+function retirarWidgetFormulario() {
+  if (!widgetFormulario) return;
+  try { widgetFormulario.ts?.remove(widgetFormulario.id); } catch { /* el widget ya no existe */ }
+  widgetFormulario = null;
+}
+
 // ------------------------------------------------------------------ reportes ciudadanos
 /* «Tus reportes anteriores» (ALR-16): qué pasó con los que ya envió este dispositivo. Si no hay
    token o la consulta falla, el bloque no se muestra y el formulario funciona igual. */
@@ -466,10 +577,9 @@ async function mountMine(body) {
    en brasa:outbox) y se reintenta al abrir el formulario y al volver la señal. */
 
 /** Token Turnstile desechable para un reenvío de la cola: el widget del formulario puede no
- *  existir (el reintento también corre con el formulario cerrado). null si no se pudo obtener:
- *  el servidor decide si acepta el reporte igual. */
-async function outboxTurnstile() {
-  const siteKey = store.get('config')?.turnstile_site_key;
+ *  existir (el reintento también corre con el formulario cerrado). null si no se pudo obtener.
+ *  La clave de sitio la resuelve flushOutbox (viaja en la configuración, REND-02). */
+async function outboxTurnstile(siteKey) {
   if (!siteKey) return null;
   const ts = await ensureTurnstile();
   if (!ts) return null;
@@ -522,11 +632,29 @@ async function shrinkPhoto(file) {
   } catch { return file; }
 }
 
-/** Reenvía los reportes guardados sin señal, del más viejo al más nuevo. 201 (nuevo) y 200 (el
- *  servidor ya tenía uno igual: devuelve `duplicate`) los sacan de la cola; si la señal vuelve a
- *  caer, se detiene y el resto queda para el próximo intento. */
-async function flushOutbox() {
+let flushPromise = null;
+
+/** Reenvía los reportes guardados sin señal, del más viejo al más nuevo. Dos disparos a la
+ *  vez (abrir el formulario, volver la señal o llegar la configuración fresca) comparten la
+ *  misma corrida: un solo POST por entrada. Devuelve la promesa compartida; se limpia al
+ *  terminar, en finally. */
+export function flushOutbox() {
+  flushPromise ??= vaciarOutbox().finally(() => { flushPromise = null; });
+  return flushPromise;
+}
+
+/** La corrida real de la cola. 201 (nuevo) y 200 (el servidor ya tenía uno igual: devuelve
+ *  `duplicate`) los sacan; si la señal vuelve a caer, se detiene y el resto queda para el
+ *  próximo intento. Sin configuración fresca no se envía nada: «configuración desconocida»
+ *  no es «desafío desactivado», y cada rechazo cuenta en el límite del servidor (6/hora). */
+async function vaciarOutbox() {
   if (navigator.onLine === false) return;
+  // La clave del antibot manda en la configuración FRESCA de esta sesión (la copia guardada
+  // pudo rotarla o perderla). Una sola espera acotada para toda la cola, no por entrada;
+  // si no llega, la cola queda intacta para el próximo intento.
+  const cfg = await esperarConfig({ fresca: true });
+  if (!cfg) return;
+  const siteKey = cfg.turnstile_site_key || null; // ausente = desafío desactivado, explícito
   for (const entry of pendientes()) {
     const form = new FormData();
     form.set('lat', String(entry.lat));
@@ -534,13 +662,16 @@ async function flushOutbox() {
     form.set('kind', entry.kind);
     form.set('description', entry.description || '');
     try {
-      const token = await outboxTurnstile();
+      const token = await outboxTurnstile(siteKey);
+      if (siteKey && !token) break; // con desafío exigido y sin token no se envía nada
       if (token) form.set('cf-turnstile-response', token);
       await api.createReport(form);
       marcarEnviado(entry.id);
     } catch (err) {
-      if (!err.status) break;                      // sin señal otra vez: queda para el próximo intento
-      if (err.status === 422) descartar(entry.id); // el dato no sirve (fuera de Chile, tipo inválido): no va a mejorar
+      if (!err.status) break;                        // sin señal otra vez: queda para el próximo intento
+      if (err.status >= 500) break;                  // el servidor falló (o estaba despertando): la cola queda intacta
+      if (err.status === 422) descartar(entry.id);  // el dato no sirve (fuera de Chile, tipo inválido): no va a mejorar
+      if (err.status === 403 || err.status === 429) break; // antibot rechazado o límite: se detiene y la cola queda intacta
     }
   }
 }
@@ -653,23 +784,77 @@ export function reportForm(preset = null, fotoCompartida = null) {
       if (picked) draft.point = picked;
       render();
     });
-    // Antibot invisible (Turnstile): solo si el servidor publica la clave de sitio. El token va en
-    // el campo `cf-turnstile-response` del formulario; si la comprobación no se puede obtener, el
-    // reporte se envía igual y la última palabra la tiene el servidor.
-    const siteKey = store.get('config')?.turnstile_site_key;
+    // Antibot invisible (Turnstile): solo si el servidor publica la clave de sitio. El token
+    // va en el campo `cf-turnstile-response`. El widget se monta apenas se conoce una clave
+    // (con la copia guardada incluida, que solo sirve para pintar) y se recrea si la clave
+    // FRESCA llega distinta.
+    let siteKey = store.get('config')?.turnstile_site_key || null;
     let turnstileResolve = null; let turnstileReject = null;
-    const tryWidget = () => ensureTurnstile().then((ts) => {
-      try {
-        return ts?.render(body.querySelector('#rf-turnstile'), {
-          sitekey: siteKey,
-          size: 'invisible',
-          callback: (t) => turnstileResolve?.(t),
-          'error-callback': () => turnstileReject?.(new Error('antibot')),
-          'timeout-callback': () => turnstileReject?.(new Error('antibot')),
-        }) ?? null;
-      } catch { return null; }
+    const forma = body.querySelector('#report-form');
+    const turnstileHost = body.querySelector('#rf-turnstile');
+    const dialog = $('#modal');
+    // Generación viva de este formulario (UX/seg): dialog.close() OCULTA el diálogo sin
+    // desconectar sus nodos, así que la vida se comprueba con dialog.open además de la
+    // conexión. Cerrar o repintar el modal a mitad de un montaje o de un envío invalida
+    // todo lo pendiente de esta generación: nada se renderiza, ejecuta ni envía después.
+    const viva = () => dialog.open && forma.isConnected;
+    // Desafío antibot en curso: al cerrar el modal se cancela su temporizador y se despierta
+    // el envío dormido (que revalida viva() y sale sin mostrar avisos fantasma).
+    let desafioCancelar = null;
+    const cancelarDesafio = () => { desafioCancelar?.(); desafioCancelar = null; };
+    // Única promesa de montaje por formulario y clave (seg): ni el envío ni la llegada
+    // tardía de la configuración montan dos widgets. Un montaje fallido se reintenta en el
+    // próximo intento.
+    let montajeKey = null; let montaje = null; let montajeSeq = 0;
+    // Invalida el montaje de esta generación, pendiente o montado: el .then en curso ve una
+    // seq distinta y no renderiza, el memo se limpia y el widget montado se retira.
+    const invalidarMontaje = () => {
+      montajeSeq += 1;
+      montaje = null;
+      montajeKey = null;
+      retirarWidgetFormulario();
+    };
+    // Al abrir esta generación se jubila el widget de la anterior (un render() repinta el
+    // modal sin cerrarlo); al cerrar el modal se invalida también el montaje PENDIENTE y se
+    // cancela el temporizador del desafío en curso.
+    retirarWidgetFormulario();
+    dialog.addEventListener('close', () => { cancelarDesafio(); invalidarMontaje(); }, { once: true });
+    const tryWidget = (key) => {
+      if (montaje && montajeKey === key) return montaje;
+      invalidarMontaje(); // clave distinta o reintento tras fallo: el montaje anterior, pendiente o montado, no sirve
+      montajeKey = key;
+      const seq = ++montajeSeq;
+      montaje = ensureTurnstile().then((ts) => {
+        const fallo = () => { if (seq === montajeSeq) { montaje = null; montajeKey = null; } return null; };
+        try {
+          // Misma generación, modal ABIERTO y contenedor conectado antes de render: un
+          // cierre o repintado mientras cargaba el script no monta un widget huérfano
+          // (dialog.close oculta el diálogo sin desconectar los nodos: por eso dialog.open).
+          if (seq !== montajeSeq || !viva()) return fallo();
+          const id = ts?.render(turnstileHost, {
+            sitekey: key,
+            size: 'invisible',
+            callback: (t) => turnstileResolve?.(t),
+            'error-callback': () => turnstileReject?.(new Error('antibot')),
+            'timeout-callback': () => turnstileReject?.(new Error('antibot')),
+          }) ?? null;
+          if (id == null) return fallo();
+          widgetFormulario = { id, ts };
+          return id;
+        } catch { return fallo(); }
+      });
+      return montaje;
+    };
+    if (siteKey) tryWidget(siteKey);
+    // Clave tardía distinta a la conocida: se invalida el widget de la vieja (montado o
+    // aún montándose) y se crea otro antes de enviar (la copia guardada solo sirve para pintar).
+    configEnModal((cfg, vive) => {
+      const key = cfg?.turnstile_site_key || null;
+      if (key === siteKey) return; // ya montado con esa clave (o ya se sabía que no hay)
+      siteKey = key;
+      invalidarMontaje();
+      if (key && vive()) tryWidget(key);
     });
-    const widgetReady = siteKey ? tryWidget() : Promise.resolve(null);
     body.querySelector('#report-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!draft.point) return toast('Indica la ubicación del reporte.', 'error');
@@ -694,22 +879,55 @@ export function reportForm(preset = null, fotoCompartida = null) {
       form.set('lat', String(draft.point.lat)); form.set('lon', String(draft.point.lon)); form.set('kind', kind);
       form.set('description', description);
       if (photo) form.set('photo', photo);
-      let widget = await Promise.race([widgetReady, new Promise((r) => setTimeout(() => r(null), 3000))]);
-      if (widget == null && siteKey) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
-        widget = await Promise.race([tryWidget(), new Promise((r) => setTimeout(() => r(null), 3000))]);
+      // Antibot (seg): la clave la manda la configuración FRESCA de esta sesión —una copia
+      // guardada vieja pudo rotarla o perderla, y con claves viejas el servidor rechazaría
+      // cada intento—. Tope acotado: sin fresca no se sabe si el servidor exige el desafío,
+      // así que no se envía nada (error explícito; el formulario conserva todo el contenido).
+      // Con la clave publicada el reporte nunca sale sin token; sin clave, sale directo.
+      const cfg = await esperarConfig({ fresca: true });
+      if (!viva()) return; // cerró durante la espera: sin avisos fantasma
+      if (!cfg) return toast('No se pudo confirmar el desafío antibot del servidor. Revisa tu conexión y vuelve a enviar.', 'error');
+      const claveFresca = cfg.turnstile_site_key || null;
+      if (claveFresca !== siteKey) { // clave rotada (o desafío apagado): el widget viejo no sirve
+        siteKey = claveFresca;
+        invalidarMontaje();
       }
+      let widget = siteKey ? await Promise.race([tryWidget(siteKey), new Promise((r) => setTimeout(() => r(null), 3000))]) : null;
+      if (!viva()) return;
+      if (siteKey && widget == null) { // la carga pudo fallar al abrir el formulario: un último intento al enviar
+        widget = await Promise.race([tryWidget(siteKey), new Promise((r) => setTimeout(() => r(null), 3000))]);
+        if (!viva()) return;
+      }
+      if (siteKey && widget == null) return toast('No se pudo cargar el desafío antibot. Revisa tu conexión y vuelve a enviar.', 'error');
       if (widget != null) {
+        // Misma generación y modal ABIERTO al ejecutar: si se cerró o repintó a mitad del
+        // envío, el widget ya no vive aquí y no se ejecuta.
+        if (!viva()) return;
+        let token = null;
         try {
-          const token = await new Promise((resolve, reject) => {
-            turnstileResolve = resolve; turnstileReject = reject;
-            setTimeout(() => reject(new Error('antibot')), 15000);
+          token = await new Promise((resolve, reject) => {
+            // Al cerrar el modal, cancelarDesafio corta este temporizador y resuelve null:
+            // el envío despierta, revalida viva() y sale en silencio.
+            const tope = setTimeout(() => { desafioCancelar = null; reject(new Error('antibot')); }, 15000);
+            const fin = () => { clearTimeout(tope); desafioCancelar = null; };
+            turnstileResolve = (t) => { fin(); resolve(t); };
+            turnstileReject = (err) => { fin(); reject(err); };
+            desafioCancelar = () => { fin(); resolve(null); };
             window.turnstile.execute(widget);
           });
-          if (token) form.set('cf-turnstile-response', token);
-        } catch { /* sin token: el servidor decide si acepta el reporte */ }
+        } catch { token = null; desafioCancelar = null; }
+        if (!viva()) return;
+        if (!token) return toast('No se pudo comprobar que eres una persona. Vuelve a enviar en unos segundos.', 'error');
+        form.set('cf-turnstile-response', token);
       }
+      // Misma generación y modal ABIERTO al enviar: cerrar el formulario durante el desafío
+      // cancela el envío —nada sale desde un modal muerto—.
+      if (!viva()) return;
       try {
         const res = await api.createReport(form);
+        // Cerrado o repintado durante la subida (puede tardar): no se reabre el modal ni se
+        // roba el foco; el resultado se confirma con un aviso flotante.
+        if (!viva()) return toast(res?.message || 'Reporte enviado.');
         openModal(html`<h2 id="modal-title">Reporte recibido</h2><p>${res.message}</p>${phonesHtml()}
           <div class="field" id="rf-mine" hidden></div>`, mountMine);
       } catch (err) {
@@ -847,9 +1065,10 @@ async function openSharedReport() {
   if (!new URLSearchParams(location.search).has('compartir')) return;
   // De un solo uso: una recarga no debe reabrir el formulario ni repetir la foto.
   history.replaceState(null, '', `${location.pathname}${location.hash}`);
-  // El antibot del formulario necesita la configuración, que el arranque aún está
-  // pidiendo: se espera unos segundos y, si no llega, el formulario abre igual.
-  for (let i = 0; i < 12 && !store.get('config'); i += 1) await new Promise((r) => setTimeout(r, 500));
+  // El antibot del formulario necesita la configuración, que el arranque pide en segundo
+  // plano (REND-02): espera acotada la FRESCA (la copia guardada solo pinta) y, si no llega,
+  // el formulario abre igual: el envío vuelve a esperarla y avisa si sigue sin llegar.
+  await esperarConfig({ fresca: true, timeoutMs: 6000 });
   reportForm(null, await takeSharedPhoto());
 }
 if (typeof location !== 'undefined') openSharedReport();

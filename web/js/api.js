@@ -58,13 +58,18 @@ function withTimeout(signal, ms) {
   const ctrl = new AbortController();
   if (signal.aborted) ctrl.abort(signal.reason);
   else {
-    signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true });
-    timeoutSignal.addEventListener('abort', () => ctrl.abort(timeoutSignal.reason), { once: true });
+    // Cada listener se retira al dispararse cualquiera de los dos: el signal del llamador
+    // suele vivir toda la sesión y no debe acumular listeners con cada petición.
+    const alLlamador = () => { limpiar(); ctrl.abort(signal.reason); };
+    const alTope = () => { limpiar(); ctrl.abort(timeoutSignal.reason); };
+    const limpiar = () => { signal.removeEventListener('abort', alLlamador); timeoutSignal.removeEventListener('abort', alTope); };
+    signal.addEventListener('abort', alLlamador);
+    timeoutSignal.addEventListener('abort', alTope);
   }
   return ctrl.signal;
 }
 
-export async function request(path, { method = 'GET', body, auth = false, form, headers = {}, signal, timeout } = {}, retried = false) {
+export async function request(path, { method = 'GET', body, auth = false, form, headers = {}, signal, timeout, withMeta = false } = {}, retried = false) {
   const ms = timeout ?? (isHeavy(path, method, form) ? HEAVY_TIMEOUT_MS : DEFAULT_TIMEOUT_MS);
   const init = { method, headers: { ...headers }, signal: withTimeout(signal, ms) };
   const token = auth ? await deviceToken() : null;
@@ -105,16 +110,20 @@ export async function request(path, { method = 'GET', body, auth = false, form, 
     // El servidor no reconoce el dispositivo (por ejemplo, base reiniciada). Solo se descarta si es el mismo
     // token que se usó: una respuesta tardía no debe borrar uno nuevo creado entretanto por otra solicitud.
     if (storage.get('token') === token) storage.set('token', null);
-    if (!retried && !form) return request(path, { method, body, auth, headers, signal, timeout }, true);
+    if (!retried && !form) return request(path, { method, body, auth, headers, signal, timeout, withMeta }, true);
   }
   try {
-    return await parse(response);
+    const parsed = await parse(response);
+    // Solo lo pide api.config (withMeta): la marca X-Brasa-Cached-At del service worker
+    // distingue la copia guardada de la respuesta de red. Los demás llamadores reciben el
+    // cuerpo, igual que siempre.
+    return withMeta ? { body: parsed, cachedAt: response.headers.get('X-Brasa-Cached-At') } : parsed;
   } catch (err) {
     // Un GET que choca con el límite del borde y pide una espera corta se repite una sola vez.
     // Las mutaciones no: repetir un POST podría duplicar un reporte o un aviso.
     if (method === 'GET' && !form && !retried && err.retryAfterS != null && err.retryAfterS <= 10) {
       await new Promise((resolve) => setTimeout(resolve, err.retryAfterS * 1000));
-      return request(path, { method, body, auth, headers, signal, timeout }, true);
+      return request(path, { method, body, auth, headers, signal, timeout, withMeta }, true);
     }
     throw err;
   }
@@ -133,7 +142,14 @@ export function deviceToken() {
 }
 
 export const api = {
-  config: () => request('/api/config'),
+  // La configuración distingue la respuesta de red de la copia del service worker (REND-02/seg):
+  // api.config devuelve el objeto de siempre más `cached_at` —fecha ISO cuando el SW sirvió su
+  // copia porque no había señal; null cuando vino de la red—. Los demás llamadores leen los
+  // campos de siempre y no cambian.
+  config: async () => {
+    const { body, cachedAt } = await request('/api/config', { withMeta: true });
+    return { ...(body || {}), cached_at: cachedAt };
+  },
   status: (history) => request(`/api/status${history ? `?history=${history}` : ''}`),
   observations: (hours, reliable) => request(`/api/observations?hours=${hours}${reliable ? '&reliable=true' : ''}`),
   explore: (params) => request(`/api/explore?${new URLSearchParams(params)}`),

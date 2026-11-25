@@ -1,9 +1,10 @@
 /* Modo vecino: sin cuenta y en solo lectura, cómo está un lugar que alguien compartió.
  * Pensado para hijos que vigilan a sus padres: letra grande, estado en una frase, qué hacer y a quién llamar. */
 import { api, request } from '../api.js';
+import { esperarConfig } from '../config.js';
 import { comunaExposure } from '../exposure.js';
 import { fly, placesGeoJSON, setData, show } from '../map.js';
-import { enablePush } from '../push.js';
+import { enablePush, pedirPermisoPush } from '../push.js';
 import { adopt, speak, stopSpeak, synth } from '../speak.js';
 import { store } from '../store.js';
 import { headline as trendHeadline, line as trendLine, pronosticoTexto } from '../trendview.js';
@@ -132,6 +133,7 @@ async function render(container, token) {
     <button class="btn btn-lg btn-block" id="estoy-bien">Estoy bien</button>
     <p class="tiny muted" style="margin-top:6px">Solo dice que alguien con este enlace lo vio: no significa que el lugar esté a salvo.</p>
     <button class="btn btn-primary btn-lg btn-block" id="follow">Que me avisen a mí también</button>
+    <p class="tiny muted" id="follow-estado" style="margin-top:6px" hidden></p>
     <p class="tiny muted" style="margin-top:6px">Se guarda una copia en este navegador: si quien lo compartió corta el enlace, tu lugar y tus avisos siguen funcionando.</p>
     ${dmcBlock(dmc, data.dmc_source)}
     ${official ? html`<h2 class="section">Lo que dice la autoridad</h2>` : ''}${officialBlock(official, data.official_source, data.comuna?.name)}
@@ -158,22 +160,58 @@ async function render(container, token) {
       }
     });
     const follow = container.querySelector('#follow');
+    // Estado del alta (seg/UX): el reintento tras un fallo de AVISOS no repite el POST follow
+    // (el lugar ya quedó guardado en el servidor), solo la activación de los avisos.
+    let followHecho = false;
+    let followCreado = false;
     follow.addEventListener('click', async () => {
       follow.disabled = true;
-      follow.textContent = 'Guardando…';
+      follow.textContent = followHecho ? 'Activando…' : 'Guardando…';
+      // Safari solo muestra el pedido de permisos con el gesto del clic vivo: se pide ANTES
+      // de cualquier await (el POST de abajo y la configuración pueden demorar, REND-02/UX).
+      const { permiso } = pedirPermisoPush();
       try {
-        const { created } = await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true });
-        const key = store.get('config')?.push?.public_key;
-        if (key) {
-          try { await enablePush(key); } catch (err) { toast(err.message, 'error'); }
+        if (!followHecho) {
+          const { created } = await request(`/api/shared/${encodeURIComponent(token)}/follow`, { method: 'POST', auth: true });
+          followHecho = true;
+          followCreado = created;
+          document.dispatchEvent(new CustomEvent('brasa:places-changed'));
         }
-        document.dispatchEvent(new CustomEvent('brasa:places-changed'));
+        // La clave pública de push viaja en la configuración FRESCA (la copia guardada solo
+        // pinta: pudo rotar): espera acotada. Sin clave no hay avisos en este teléfono: se
+        // avisa en claro, nunca en silencio.
+        const key = (await esperarConfig({ fresca: true }))?.push?.public_key;
+        let avisos = false;
+        if (key) {
+          try { await enablePush(key, { permiso }); avisos = true; }
+          catch (err) { toast(`${err.message} Pulsa «Reintentar avisos» para volver a intentarlo.`, 'error'); }
+        } else {
+          toast('No se pudo activar los avisos en este teléfono: la configuración del servidor no llegó. Cuando pase, pulsa «Reintentar avisos» aquí mismo.', 'error');
+        }
         if (!mounted) return;
-        follow.textContent = created ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
+        if (avisos) {
+          const estado = container.querySelector('#follow-estado');
+          if (estado) estado.hidden = true; // el reintento salió: ya no aplica el aviso de fallo
+          follow.textContent = followCreado ? 'Listo: te avisaremos de este lugar' : 'Ya lo tenías guardado: tus avisos siguen igual';
+        } else {
+          // El lugar quedó guardado, pero los avisos no se activaron: el estado queda visible
+          // junto al botón y el botón es una acción clara. El reintento activa SOLO los
+          // avisos, sin repetir el POST del lugar.
+          const estado = container.querySelector('#follow-estado');
+          if (estado) { estado.hidden = false; estado.textContent = 'Lugar guardado; avisos no activados'; }
+          follow.disabled = false;
+          follow.textContent = 'Reintentar avisos';
+        }
       } catch (err) {
         if (!mounted) return;
         follow.disabled = false;
-        follow.textContent = 'Reintentar';
+        if (followHecho) {
+          const estado = container.querySelector('#follow-estado');
+          if (estado) { estado.hidden = false; estado.textContent = 'Lugar guardado; avisos no activados'; }
+          follow.textContent = 'Reintentar avisos';
+        } else {
+          follow.textContent = 'Reintentar';
+        }
         toast(err.message, 'error');
       }
     });

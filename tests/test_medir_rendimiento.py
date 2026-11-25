@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -299,3 +300,101 @@ def test_informe_y_codigo_de_salida_de_la_comparacion():
     texto_invalida = cr.informe_markdown(datos_invalida)
     assert "NO" in texto_invalida and "incompletas" in texto_invalida
     assert cr.codigo_salida(datos_invalida) == 2  # sin errores del producto, la comparación queda invalidada
+
+
+# ------------------------------------------------------------------ REND-02 PR2: /api/config retrasada
+
+class CtxFalso:
+    """Contexto de Playwright de mentira: registra los patrones que se enrutan."""
+
+    def __init__(self):
+        self.patrones = []
+
+    def route(self, patron, manejador):
+        self.patrones.append((patron, manejador))
+
+
+class RutaFalsa:
+    """Ruta interceptada de mentira: guarda la acción que tomó el manejador."""
+
+    def __init__(self, url):
+        self.request = SimpleNamespace(url=url)
+        self.accion = None
+
+    def abort(self):
+        self.accion = "abortar"
+
+    def continue_(self):
+        self.accion = "seguir"
+
+
+def _manejador_de(ctx, patron):
+    return next(manejador for p, manejador in ctx.patrones if p == patron)
+
+
+def test_modo_servidor_el_navegador_no_retrasa_config(monkeypatch):
+    """BRASA_BENCH_CONFIG_SERVER=1: el retraso lo pone perf_server; el cliente ni enruta /api/config."""
+    monkeypatch.setenv("BRASA_BENCH_CONFIG_SERVER", "1")
+    ctx = CtxFalso()
+    mr.instalar_rutas(ctx, {"retrasoConfigMs": 3000, "integracionReal": False})
+    patrones = [p for p, _ in ctx.patrones]
+    assert patrones == [f"https://{host}/**" for host in mr.ORIGENES_EXTERNOS]
+    assert not any("api/config" in p for p in patrones), \
+        "con el retraso en el servidor, duplicarlo en el cliente mediría dos veces la espera"
+
+
+def test_modo_standalone_el_navegador_retrasa_config(monkeypatch):
+    monkeypatch.delenv("BRASA_BENCH_CONFIG_SERVER", raising=False)
+    ctx = CtxFalso()
+    mr.instalar_rutas(ctx, {"retrasoConfigMs": 3000, "integracionReal": False})
+    manejador = _manejador_de(ctx, "**/api/config")
+    dormidas = []
+    monkeypatch.setattr(mr.time, "sleep", lambda segundos: dormidas.append(segundos))
+    config = RutaFalsa("http://127.0.0.1:8002/api/config")
+    manejador(config)
+    assert dormidas == [3.0] and config.accion == "seguir"
+    # solo el camino exacto de config duerme; el resto pasa
+    otra = RutaFalsa("http://127.0.0.1:8002/api/risk")
+    manejador(otra)
+    assert dormidas == [3.0] and otra.accion == "seguir"
+
+
+def test_los_bloqueos_externos_siguen_intactos(monkeypatch):
+    monkeypatch.delenv("BRASA_BENCH_CONFIG_SERVER", raising=False)
+    ctx = CtxFalso()
+    mr.instalar_rutas(ctx, {"retrasoConfigMs": 3000, "integracionReal": False})
+    manejador = _manejador_de(ctx, "https://tiles.openfreemap.org/**")
+    tile = RutaFalsa("https://tiles.openfreemap.org/planet/3/4/5.png")
+    manejador(tile)
+    assert tile.accion == "abortar"
+    # lo del propio despliegue nunca se aborta, aunque comparta manejador
+    propia = RutaFalsa("http://127.0.0.1:8002/web/js/app.js")
+    manejador(propia)
+    assert propia.accion == "seguir"
+
+
+def test_standalone_sin_retraso_no_enruta_config(monkeypatch):
+    monkeypatch.delenv("BRASA_BENCH_CONFIG_SERVER", raising=False)
+    ctx = CtxFalso()
+    mr.instalar_rutas(ctx, {"retrasoConfigMs": 0, "integracionReal": False})
+    assert [p for p, _ in ctx.patrones] == [f"https://{host}/**" for host in mr.ORIGENES_EXTERNOS]
+
+
+def test_integracion_real_no_instala_bloqueos(monkeypatch):
+    monkeypatch.delenv("BRASA_BENCH_CONFIG_SERVER", raising=False)
+    ctx = CtxFalso()
+    mr.instalar_rutas(ctx, {"retrasoConfigMs": 3000, "integracionReal": True})
+    manejador = _manejador_de(ctx, "**/api/config")
+    tile = RutaFalsa("https://gibs.earthdata.nasa.gov/wmts/x")
+    manejador(tile)
+    assert tile.accion == "seguir", "con --integracion-real el externo pasa (se registra aparte)"
+
+
+def test_retraso_config_del_cli_y_opciones():
+    args = mr.parsear_args(["https://a.example", "salida", "--retraso-config-ms", "3000"])
+    assert args.retraso_config_ms == 3000
+    assert mr.opciones_de(args)["retrasoConfigMs"] == 3000
+    assert mr.parsear_args(["https://a.example", "salida"]).retraso_config_ms == 0
+    # el negativo se rechaza (el tope de 10000 lo valida el orquestador del CI)
+    with pytest.raises(SystemExit):
+        mr.parsear_args(["https://a.example", "salida", "--retraso-config-ms", "-1"])

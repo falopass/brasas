@@ -596,7 +596,8 @@ class Seguimiento:
 
 def instalar_rutas(ctx, opciones: dict) -> None:
     """Intercepta el tráfico del contexto: bloquea las fuentes externas y retrasa /api/config si se pide."""
-    retraso = opciones.get('retrasoConfigMs') or 0
+    retraso = 0 if os.environ.get('BRASA_BENCH_CONFIG_SERVER') == '1' else \
+        (opciones.get('retrasoConfigMs') or 0)
 
     def manejador(ruta):
         url = ruta.request.url
@@ -932,6 +933,7 @@ def construir_metadatos(args, browser, comparacion: bool = False) -> dict:
         'dispositivos': args.dispositivos, 'redes': args.redes, 'cpus': args.cpus, 'caches': args.caches,
         'rutas': args.rutas, 'muestras': args.muestras, 'timeoutS': args.timeout_s,
         'integracionReal': args.integracion_real, 'retrasoConfigMs': args.retraso_config_ms,
+        'retrasoConfigServidor': os.environ.get('BRASA_BENCH_CONFIG_SERVER') == '1',
         'origenesExternos': list(ORIGENES_EXTERNOS), 'hashesDatos': args.hash_datos,
     }
     if comparacion:
