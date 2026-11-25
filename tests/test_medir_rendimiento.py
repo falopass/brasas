@@ -7,6 +7,22 @@ incompletas conservadas), la validez de una comparación, la clasificación de e
 (producto/externo/bloqueado/esperado), los bytes de red vs caché, el reinicio de cada
 transición SPA y los filtros de CLI para jobs de CI.
 
+REND-02 tanda 5 cubre además: el desglose de bytes por grupo de recurso (clasificación de
+URLs, sumas, duplicados, red vs caché), las rutas mapa-capas (nombres públicos y orden de
+capas, espera de red quieta tras el contenido usable) y la grilla de viento sintética del
+servidor de rendimiento (forma exacta de backend/windgrid.py, determinista y
+representativa en tamaño).
+
+Esta continuación añade la ruta `mapa-capas-santiago` (mapa con capas acercado a una
+ubicación real de Santiago con lat/lon/z), el límite estricto de las esperas (la encuesta
+nunca sobrepasa el tope del paso) y sus timeouts explícitos: antes de la ventana de red
+quieta se espera de forma verificable el encuadre (zoom objetivo con tolerancia y mapa
+sin movimiento, vía getMap de /web/js/map.js desde la página), porque el contenido usable
+llega mientras el vuelo animado sigue en curso y las teselas de infraestructura solo se
+piden tras moveend. Si el encuadre o la red quieta no se confirman dentro del timeout,
+la muestra queda incompleta como error del medidor, sin tocar el tiempo hasta el
+contenido usable.
+
 La medición en sí (navegador, CDP, contextos) la corren los scripts contra despliegues
 reales; su cobertura está en docs/RENDIMIENTO_INTEGRAL.md.
 """
@@ -14,6 +30,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,7 +42,8 @@ import medir_rendimiento as mr  # noqa: E402
 import comparar_rendimiento as cr  # noqa: E402
 
 
-def muestra(ms, estado="util", *, errores=None, fcp=None, lcp=None, bytes_red=1000, pasos_extra=None):
+def muestra(ms, estado="util", *, errores=None, fcp=None, lcp=None, bytes_red=1000, pasos_extra=None,
+            por_grupo=None):
     """Muestra mínima con la forma real de medir_contexto."""
     pasos = {"directo": {"estado": estado, "ms": ms, "cls": 0.0, "tareasLargasMs": 10.0, "nTareasLargas": 1}}
     if pasos_extra:
@@ -35,7 +53,8 @@ def muestra(ms, estado="util", *, errores=None, fcp=None, lcp=None, bytes_red=10
         "pasos": pasos, "estado": mr.estado_global(pasos),
         "documento": {"fcpMs": fcp, "lcpMs": lcp, "clsMs": None, "loadMs": None, "dclMs": None},
         "errores": errores or [],
-        "bytes": {"bytesRed": bytes_red, "bytesCache": 0, "pedidos": 2, "pedidosUnicos": 2, "duplicados": 0, "porTipo": {}},
+        "bytes": {"bytesRed": bytes_red, "bytesCache": 0, "pedidos": 2, "pedidosUnicos": 2, "duplicados": 0,
+                  "porTipo": {}, "porGrupo": por_grupo or {}},
         "procesamiento": {}, "interaccionRafMs": None, "captura": None,
         "completa": all(p["estado"] == "util" for p in pasos.values()),
     }
@@ -89,6 +108,97 @@ def test_criterios_por_ruta():
     assert mr.criterio_de("preguntas")["minTexto"] == 300
     js = mr.criterio_js("riesgo")
     assert js.startswith("window.__brasaPerfCriterio = ") and "#r-search" in js
+
+
+def test_ruta_mapa_capas_mide_el_costo_de_prender_capas():
+    ruta = mr.RUTAS["mapa-capas"]
+    assert ruta["url"] == "/#/mapa?capas=focos,viento,infraestructura"
+    assert ruta["hash"] == "#/mapa?capas=focos,viento,infraestructura"
+    assert ruta["tipo"] == "spa"
+    # mismo criterio de contenido usable (y de fallo) que mapa
+    assert ruta["listo"] == mr.RUTAS["mapa"]["listo"]
+    assert ruta["fallo"] == mr.RUTAS["mapa"]["fallo"]
+    # tras util, espera la red quieta de los grupos que mide
+    assert set(ruta["redQuieta"]) == {"infraestructura", "viento"}
+    assert all(grupo in mr.GRUPOS_RECURSOS for grupo in ruta["redQuieta"])
+    # los nombres de capas son los públicos de web/js/capas.js (url: de CAPAS) y van en el
+    # orden del control: capasToUrl reescribe la URL con ese orden y el hash queda estable
+    capas_js = (RAIZ / "web" / "js" / "capas.js").read_text(encoding="utf-8")
+    nombres = [n.strip() for n in ruta["url"].split("capas=")[1].split(",")]
+    for nombre in nombres:
+        assert f"url: '{nombre}'" in capas_js, f"{nombre} no es un nombre público de capa"
+    posiciones = [capas_js.index(f"url: '{n}'") for n in nombres]
+    assert posiciones == sorted(posiciones), "las capas deben ir en el orden del control (capasToUrl)"
+    # el CLI la acepta; sin filtro, la matriz completa la incluye
+    args = mr.parsear_args(["https://a.example", "salida", "--ruta", "mapa-capas"])
+    assert args.rutas == ["mapa-capas"]
+    assert "mapa-capas" in mr.parsear_args(["https://a.example", "salida"]).rutas
+    # el criterio inicial del documento empareja el hash completo con capas
+    js = mr.criterios_documento_js()
+    assert "#/mapa?capas=focos,viento,infraestructura" in js
+
+
+def test_ruta_mapa_capas_santiago_acercado_en_ubicacion_real():
+    import math
+
+    ruta = mr.RUTAS["mapa-capas-santiago"]
+    # URL profunda real: la vista interpreta lat/lon/z al montar (fly al encuadre) y con
+    # lat/lon no reencuadra a los focos, así que el encuadre medido es siempre Santiago
+    assert ruta["url"].startswith("/#/mapa?capas=")
+    params = dict(p.split("=") for p in ruta["url"].split("?")[1].split("&"))
+    assert params["lat"] == "-33.45" and params["lon"] == "-70.66"
+    # z 11 supera INFRA_MINZOOM (10): las teselas de infraestructura del encuadre se piden
+    assert params["z"] == "11" and int(params["z"]) >= 10
+    # mismo criterio de contenido usable (y de fallo) que mapa y mapa-capas
+    assert ruta["listo"] == mr.RUTAS["mapa"]["listo"]
+    assert ruta["fallo"] == mr.RUTAS["mapa"]["fallo"]
+    assert set(ruta["redQuieta"]) == {"infraestructura", "viento"}
+    assert ruta["tipo"] == "spa"
+    # el hash completo (capas + lat/lon/z) es el criterio de la muestra: updateCapasUrl de
+    # la vista conserva los parámetros que no son `capas` y reescribe `capas` con el orden
+    # del control, así que el hash queda estable durante toda la muestra
+    assert ruta["hash"] == ruta["url"].lstrip("/")
+    # el encuadre esperado se declara con el zoom de la URL: la medición lo verifica contra
+    # el mapa real antes de cerrar los bytes (el contenido usable llega antes del fin del vuelo)
+    assert ruta["encuadre"] == {"zoom": 11} and int(params["z"]) == ruta["encuadre"]["zoom"]
+    assert 0 < mr.ENCUADRE_TOLERANCIA_ZOOM <= 0.5
+    capas_js = (RAIZ / "web" / "js" / "capas.js").read_text(encoding="utf-8")
+    nombres = [n.strip() for n in params["capas"].split(",")]
+    posiciones = [capas_js.index(f"url: '{n}'") for n in nombres]
+    assert posiciones == sorted(posiciones), "las capas van en el orden del control (capasToUrl)"
+    # los comportamientos de la vista que sostienen ese hash estable (solo lectura: si la
+    # vista cambia, este check obliga a revisar el criterio de la ruta)
+    mapa_js = (RAIZ / "web" / "js" / "views" / "mapa.js").read_text(encoding="utf-8")
+    assert "const params = new URLSearchParams(query);" in mapa_js
+    assert "params.set('capas', capasToUrl(layers));" in mapa_js
+    assert "history.replaceState" in mapa_js  # reescribir el hash no remonta la vista
+    assert "fly(Number(params.lon), Number(params.lat), Number(params.z) || 11)" in mapa_js
+    # la espera del encuadre consulta la API pública del mapa real de la página
+    map_js = (RAIZ / "web" / "js" / "map.js").read_text(encoding="utf-8")
+    assert "export function getMap" in map_js
+    # ubicación real representativa: ambos encuadres (móvil y escritorio) caen en la tesela
+    # -34_-71, la más grande del catastro (centro de Chile metropolitano)
+    assert math.floor(float(params["lat"])) == -34 and math.floor(float(params["lon"])) == -71
+    indice = json.loads((RAIZ / "web" / "data" / "infraestructura" / "indice.json").read_text(encoding="utf-8"))
+    assert indice["teselas"]["-34_-71"]["rows"] > 1000
+    assert (RAIZ / "web" / "data" / "infraestructura" / "t" / "-34_-71.json").exists()
+    # el CLI la acepta; sin filtro, la matriz completa la incluye
+    args = mr.parsear_args(["https://a.example", "salida", "--ruta", "mapa-capas-santiago"])
+    assert args.rutas == ["mapa-capas-santiago"]
+    assert "mapa-capas-santiago" in mr.parsear_args(["https://a.example", "salida"]).rutas
+    # el criterio inicial del documento empareja el hash completo, parámetros incluidos
+    assert ruta["hash"] in mr.criterios_documento_js()
+
+
+def test_ci_por_defecto_mide_mapa_capas_acercado():
+    import ejecutar_rendimiento_ci as eci
+
+    rutas = eci.RUTAS_CI_PREDETERMINADAS.split(",")
+    assert len(rutas) == len(set(rutas)), "el CI no mide rutas repetidas"
+    assert "mapa-capas" in rutas and "mapa-capas-santiago" in rutas
+    # el CI solo puede medir rutas que existen y cada una con criterio de contenido usable
+    assert all(r in mr.RUTAS for r in rutas)
+    assert all(mr.RUTAS[r]["listo"] for r in rutas)
 
 
 # ------------------------------------------------------------------ CLI: mínimo, filtros y alias
@@ -213,10 +323,88 @@ def test_resumen_red_separa_bytes_de_red_y_de_cache():
         "3": {"url": "https://a/api", "tipo": "Fetch", "bytes": 500, "desdeCache": True, "desdeSw": False, "estado": 200},
         "4": {"url": "https://a/y.css", "tipo": "Stylesheet", "bytes": 200, "desdeCache": False, "desdeSw": True, "estado": 200},
     }
-    res = mr.resumen_red(pedidos)
+    res = mr.resumen_red(pedidos, "https://a")
     assert res["bytesRed"] == 2000  # lo servido por la red (encodedDataLength), no lo cacheado
     assert res["bytesCache"] == 700  # disco y service worker aparte
     assert res["pedidos"] == 4 and res["pedidosUnicos"] == 3 and res["duplicados"] == 1
+
+
+# ------------------------------------------- REND-02 tanda 5: desglose por grupo de recurso
+
+def test_grupo_de_url_clasifica_por_grupo_de_recurso():
+    base = "https://brasa.example"
+    assert mr.grupo_de_url(f"{base}/web/data/infraestructura/indice.json", base) == "infraestructura"
+    # las teselas de 1° de la infraestructura particionada también son del grupo
+    assert mr.grupo_de_url(f"{base}/web/data/infraestructura/t/-33_-71.json", base) == "infraestructura"
+    assert mr.grupo_de_url(f"{base}/api/wind/grid", base) == "viento"
+    assert mr.grupo_de_url(f"{base}/web/data/cases.json", base) == "datosEstaticos"
+    assert mr.grupo_de_url(f"{base}/api/risk", base) == "api"
+    assert mr.grupo_de_url(f"{base}/web/js/app.js", base) == "app"
+    assert mr.grupo_de_url(f"{base}/", base) == "app"
+    # las fuentes externas del mapa (bloqueadas por defecto) son su propio grupo
+    assert mr.grupo_de_url("https://tiles.openfreemap.org/planet/3/4/5.png", base) == "teselasMapa"
+    assert mr.grupo_de_url("https://gibs.earthdata.nasa.gov/wmts/x", base) == "teselasMapa"
+    # un tercero que no es teselas: inesperado, se informa aparte
+    assert mr.grupo_de_url("https://otro.example/datos.json", base) == "otros"
+    # los prefijos específicos ganan a los genéricos
+    assert mr.grupo_de_url(f"{base}/web/data/infraestructura/otro.json", base) == "infraestructura"
+    assert set(mr.GRUPOS_RECURSOS) >= {"infraestructura", "viento", "teselasMapa", "datosEstaticos", "api"}
+    assert mr.grupo_de_url(f"{base}/web/data/infraestructura/indice.json", "https://otro.example") == "otros"
+
+
+def test_resumen_red_desglosa_bytes_por_grupo():
+    base = "https://brasa.example"
+    pedidos = {
+        "1": {"url": f"{base}/web/data/infraestructura/indice.json", "tipo": "Fetch", "bytes": 40000,
+              "desdeCache": False, "desdeSw": False, "estado": 200},
+        "2": {"url": f"{base}/web/data/infraestructura/indice.json", "tipo": "Fetch", "bytes": 40000,
+              "desdeCache": True, "desdeSw": False, "estado": 200},
+        "3": {"url": f"{base}/api/wind/grid", "tipo": "Fetch", "bytes": 60000,
+              "desdeCache": False, "desdeSw": False, "estado": 200},
+        "4": {"url": f"{base}/web/data/cases.json", "tipo": "Fetch", "bytes": 9000,
+              "desdeCache": False, "desdeSw": True, "estado": 200},
+        "5": {"url": f"{base}/api/risk", "tipo": "Fetch", "bytes": 7000,
+              "desdeCache": False, "desdeSw": False, "estado": 200},
+        "6": {"url": f"{base}/web/js/app.js", "tipo": "Script", "bytes": 50000,
+              "desdeCache": False, "desdeSw": False, "estado": 200},
+        "7": {"url": "https://tiles.openfreemap.org/planet/3/4/5.png", "tipo": "Image", "bytes": 0,
+              "desdeCache": False, "desdeSw": False, "estado": None},
+    }
+    res = mr.resumen_red(pedidos, base)
+    g = res["porGrupo"]
+    # por grupo: n pedidos, bytesRed, bytesCache y duplicados (la misma URL dos veces)
+    assert g["infraestructura"] == {"n": 2, "bytesRed": 40000, "bytesCache": 40000, "duplicados": 1}
+    assert g["viento"] == {"n": 1, "bytesRed": 60000, "bytesCache": 0, "duplicados": 0}
+    assert g["datosEstaticos"] == {"n": 1, "bytesRed": 0, "bytesCache": 9000, "duplicados": 0}
+    assert g["api"] == {"n": 1, "bytesRed": 7000, "bytesCache": 0, "duplicados": 0}
+    assert g["app"] == {"n": 1, "bytesRed": 50000, "bytesCache": 0, "duplicados": 0}
+    # teselas bloqueadas: cuentan pedidos, sin bytes (por defecto se abortan)
+    assert g["teselasMapa"] == {"n": 1, "bytesRed": 0, "bytesCache": 0, "duplicados": 0}
+    assert g["otros"] == {"n": 0, "bytesRed": 0, "bytesCache": 0, "duplicados": 0}
+    # los grupos siempre están todos y suman exactamente los totales del resumen
+    assert set(g) == set(mr.GRUPOS_RECURSOS)
+    assert sum(x["n"] for x in g.values()) == res["pedidos"]
+    assert sum(x["bytesRed"] for x in g.values()) == res["bytesRed"]
+    assert sum(x["bytesCache"] for x in g.values()) == res["bytesCache"]
+    assert sum(x["duplicados"] for x in g.values()) == res["duplicados"]
+
+
+def test_resumen_mediana_por_grupo_solo_con_muestras_completas():
+    grupos = {"infraestructura": {"n": 1, "bytesRed": 40000, "bytesCache": 0, "duplicados": 0},
+              "viento": {"n": 1, "bytesRed": 60000, "bytesCache": 0, "duplicados": 0}}
+    completas = [muestra(100, bytes_red=100000, por_grupo=grupos) for _ in range(5)]
+    # la incompleta trae bytes desaforados: no debe contaminar ninguna mediana
+    incompleta = muestra(999, estado="timeout", bytes_red=999999, por_grupo={
+        "infraestructura": {"n": 1, "bytesRed": 999999, "bytesCache": 0, "duplicados": 0}})
+    res = mr.resumir_muestras(completas + [incompleta])
+    pg = res["bytes"]["porGrupo"]
+    assert pg["infraestructura"]["bytesRedMediana"] == 40000.0
+    assert pg["infraestructura"]["bytesRedPeor"] == 40000.0
+    assert pg["viento"]["bytesRedMediana"] == 60000.0
+    assert pg["viento"]["nMediana"] == 1.0
+    assert pg["teselasMapa"]["bytesRedMediana"] is None  # grupo sin pedidos en ninguna completa
+    assert set(pg) == set(mr.GRUPOS_RECURSOS)
+    assert res["bytes"]["bytesRedMediana"] == 100000  # el total no cambia
 
 
 def test_clasificacion_de_urls_y_textos():
@@ -300,6 +488,377 @@ def test_informe_y_codigo_de_salida_de_la_comparacion():
     texto_invalida = cr.informe_markdown(datos_invalida)
     assert "NO" in texto_invalida and "incompletas" in texto_invalida
     assert cr.codigo_salida(datos_invalida) == 2  # sin errores del producto, la comparación queda invalidada
+
+
+def test_informes_incluyen_el_desglose_por_grupo():
+    grupos_base = {"viento": {"n": 1, "bytesRed": 60000, "bytesCache": 0, "duplicados": 0}}
+    grupos_cand = {"viento": {"n": 1, "bytesRed": 90000, "bytesCache": 0, "duplicados": 0}}
+    base = [muestra(100, bytes_red=60000, por_grupo=grupos_base) for _ in range(5)]
+    candidata = [muestra(150, bytes_red=90000, por_grupo=grupos_cand) for _ in range(5)]
+    datos = {"metadatos": {}, "comparacion": cr.comparar(base, candidata, 5)}
+    texto = cr.informe_markdown(datos)
+    assert "## Bytes por grupo de recurso" in texto
+    assert "viento" in texto and "+50.0 %" in texto  # 60 000 → 90 000 B por la grilla
+    # los grupos sin pedidos en ningún lado no generan filas
+    assert "infraestructura" not in texto
+    # el informe de un despliegue solo también desglosa
+    datos_medicion = {"metadatos": {}, "muestras": base, "resumen": mr.resumir_por_escenario(base)}
+    texto_medicion = mr.informe_markdown(datos_medicion)
+    assert "## Bytes por grupo de recurso" in texto_medicion
+    assert "viento" in texto_medicion and "60000" in texto_medicion
+
+
+# ------------------------------------- REND-02 tanda 5: red quieta y grilla sintética
+
+class SeguimientoFalso:
+    """Seguimiento de mentira: solo los pedidos acumulados."""
+
+    def __init__(self, pedidos):
+        self.pedidos = pedidos
+
+
+class SeguimientoConErrores(SeguimientoFalso):
+    """Seguimiento de mentira que también registra los errores, como el real."""
+
+    def __init__(self, pedidos):
+        super().__init__(pedidos)
+        self.errores = []
+
+    def error(self, entrada):
+        self.errores.append(entrada)
+
+
+class PaginaQuieta:
+    """Página de mentira: espera de verdad los ms que le piden (como page.wait_for_timeout)."""
+
+    def wait_for_timeout(self, ms):
+        time.sleep(ms / 1000)
+
+
+def test_esperar_red_quieta_confirma_la_ventana_sin_pedidos():
+    base = "https://brasa.example"
+    pedidos = {
+        "1": {"url": f"{base}/api/wind/grid", "fin": True, "fallo": ""},
+        "2": {"url": f"{base}/web/data/infraestructura/indice.json", "fin": False, "fallo": ""},
+    }
+    seg = SeguimientoFalso(pedidos)
+    # la infraestructura nunca termina: el tope vence sin confirmar la ventana (mejor esfuerzo)
+    assert mr.esperar_red_quieta(seg, PaginaQuieta(), base, ("infraestructura", "viento"), 400,
+                                ventana_ms=150) is False
+    assert mr.pedidos_en_vuelo(seg.pedidos, base, ("infraestructura", "viento")) == \
+        [f"{base}/web/data/infraestructura/indice.json"]
+    # al terminar el pedido, la ventana de silencio se confirma dentro del tope
+    pedidos["2"]["fin"] = True
+    inicio = time.monotonic()
+    assert mr.esperar_red_quieta(seg, PaginaQuieta(), base, ("infraestructura", "viento"), 2000,
+                                ventana_ms=150) is True
+    assert time.monotonic() - inicio >= 0.15
+    # un fallo de red también saca el pedido de «en vuelo» (tesela abortada, 503, sin señal)
+    pedidos["2"]["fin"] = False
+    pedidos["2"]["fallo"] = "net::ERR_FAILED"
+    assert mr.pedidos_en_vuelo(seg.pedidos, base, ("infraestructura", "viento")) == []
+    # los pedidos de otros grupos no estorban: la red de infraestructura/viento está quieta
+    pedidos["3"] = {"url": f"{base}/web/js/app.js", "fin": False, "fallo": ""}
+    assert mr.esperar_red_quieta(seg, PaginaQuieta(), base, ("infraestructura", "viento"), 2000,
+                                ventana_ms=150) is True
+
+
+def test_calmar_red_de_ruta_solo_tras_util_y_con_tope_del_paso(monkeypatch):
+    base = "https://brasa.example"
+    seg = SeguimientoConErrores({})
+    opciones = {"timeoutMs": 2000}
+    inicio = time.monotonic()
+    # sin redQuieta ni sin util: no espera nada ni devuelve confirmación
+    assert mr.calmar_red_de_ruta({"listo": "#x"}, seg, PaginaQuieta(), base, "util", inicio, opciones) is None
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas"], seg, PaginaQuieta(), base, "timeout", inicio, opciones) is None
+    assert time.monotonic() - inicio < 0.1
+    assert seg.errores == []
+    # con util, delega en esperar_red_quieta con los grupos de la ruta y tope dentro del paso
+    llamadas = []
+    monkeypatch.setattr(mr, "esperar_red_quieta",
+                        lambda seg_, page, base_, grupos, tope: llamadas.append((grupos, tope)) or True)
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones, paso="directo") is True
+    assert len(llamadas) == 1
+    grupos, tope = llamadas[0]
+    assert tuple(grupos) == ("infraestructura", "viento")
+    assert 0 < tope <= opciones["timeoutMs"]
+    assert seg.errores == []  # la red quieta confirmada no registra nada
+
+
+def test_calmar_red_de_ruta_registra_el_timeout_de_red_quieta_como_medidor(monkeypatch):
+    """El False de esperar_red_quieta no se ignora: timeout explícito, muestra incompleta,
+    tiempo util del paso intacto (los bytes de esos grupos pueden estar truncados)."""
+    base = "https://brasa.example"
+    seg = SeguimientoConErrores({})
+    opciones = {"timeoutMs": 2000}
+    # el encuadre sí llega: el fallo acá es de la red, no del vuelo
+    monkeypatch.setattr(mr, "esperar_encuadre", lambda *a, **k: True)
+    monkeypatch.setattr(mr, "esperar_red_quieta", lambda *a, **k: False)
+    inicio = time.monotonic()
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas-santiago"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones, paso="directo") is False
+    assert len(seg.errores) == 1
+    error = seg.errores[0]
+    assert error["tipo"] == "redQuieta" and error["clase"] == "medidor" and error["paso"] == "directo"
+    assert "truncados" in error["texto"] and "infraestructura" in error["texto"]
+    # sin nombre de paso no registra (lo llama quien sabe qué paso medir)
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas-santiago"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones) is False
+    assert len(seg.errores) == 1
+    # la regla de medir_contexto: el error del medidor deja la muestra incompleta aunque el
+    # paso haya llegado a util; el conteo invalida la comparación sin errores del producto
+    paso_util = {"directo": {"estado": "util", "ms": 1200, "cls": 0.0, "tareasLargasMs": 5.0, "nTareasLargas": 1}}
+    completas = [muestra(100) for _ in range(5)]
+    truncada = muestra(1200, errores=[error])
+    truncada["pasos"] = paso_util
+    truncada["completa"] = all(p["estado"] == "util" for p in paso_util.values()) and \
+        not any(e.get("clase") == "medidor" for e in truncada["errores"])
+    assert truncada["completa"] is False
+    res = mr.resumir_muestras(completas + [truncada])
+    assert res["nCompletas"] == 5 and res["nIncompletas"] == 1
+    assert res["errores"]["medidor"] == 1 and res["errores"]["producto"] == 0
+    assert res["pasos"]["directo"]["medianaMs"] == 100  # el tiempo util no se contamina
+    valida, motivos = mr.comparacion_valida(res, res, 5)
+    assert not valida and any("incompletas" in m for m in motivos)
+    assert mr.codigo_salida(res) == 0  # no es un error del producto: la comparación queda invalidada
+
+
+class PaginaReloj:
+    """Página de mentira con reloj propio: wait_for_timeout avanza el reloj en vez de dormir."""
+
+    def __init__(self):
+        self.reloj = 0.0
+        self.esperas = []
+
+    def wait_for_timeout(self, ms):
+        self.esperas.append(ms)
+        self.reloj += ms / 1000
+
+
+def test_esperar_red_quieta_no_supera_el_tope_del_paso(monkeypatch):
+    """Límite estricto: la encuesta de 100 ms se recorta a lo que queda del tope y la espera
+    total nunca lo sobrepasa (antes la última encuesta dormía 100 ms completos)."""
+    base = "https://brasa.example"
+    pedidos = {"1": {"url": f"{base}/web/data/infraestructura/t/-34_-71.json", "fin": False, "fallo": ""}}
+    seg = SeguimientoFalso(pedidos)
+    pagina = PaginaReloj()
+    monkeypatch.setattr(mr.time, "monotonic", lambda: pagina.reloj)
+    # la tesela nunca termina: el tope vence exacto, con la última encuesta recortada
+    assert mr.esperar_red_quieta(seg, pagina, base, ("infraestructura", "viento"), 350) is False
+    assert pagina.esperas == [100, 100, 100, 50]
+    assert pagina.reloj == pytest.approx(0.35)  # ni un milisegundo por encima del tope del paso
+    # con la red quieta, la ventana de silencio se confirma dentro del tope
+    pedidos["1"]["fin"] = True
+    pagina_quieta = PaginaReloj()
+    monkeypatch.setattr(mr.time, "monotonic", lambda: pagina_quieta.reloj)
+    assert mr.esperar_red_quieta(seg, pagina_quieta, base, ("infraestructura", "viento"), 350,
+                                ventana_ms=150) is True
+    assert pagina_quieta.esperas == [100, 100]
+    assert pagina_quieta.reloj == pytest.approx(0.2)
+
+
+# ------------------------------------------- REND-02: espera verificable del encuadre (zoom + fin del vuelo)
+
+def test_js_estado_encuadre_consulta_el_mapa_real_de_la_pagina():
+    js = mr.js_estado_encuadre()
+    # el módulo real de la app, el mismo que carga la vista del mapa
+    assert "import('/web/js/map.js')" in js
+    # la API pública de map.js y MapLibre: getMap, getZoom e isMoving
+    assert "getMap()" in js and "getZoom()" in js and "isMoving()" in js
+    # el import() dinámico de módulos propios ya lo usa la vista: la CSP de la app lo permite
+    mapa_js = (RAIZ / "web" / "js" / "views" / "mapa.js").read_text(encoding="utf-8")
+    assert "import('../viento.js')" in mapa_js
+    # el veredicto lo decide Python (tolerancia en una sola fuente), el JS solo reporta
+    assert "listo" not in js
+
+
+def test_encuadre_listo_exige_zoom_con_tolerancia_y_fin_del_movimiento():
+    encuadre = {"zoom": 11}
+    assert mr.encuadre_listo({"zoom": 11.0, "moviendo": False}, encuadre) is True
+    assert mr.encuadre_listo({"zoom": 11.0 - mr.ENCUADRE_TOLERANCIA_ZOOM, "moviendo": False},
+                             encuadre) is True, "el borde de la tolerancia acepta"
+    assert mr.encuadre_listo({"zoom": 10.4, "moviendo": False}, encuadre) is False, "zoom bajo la tolerancia"
+    assert mr.encuadre_listo({"zoom": 12.0, "moviendo": True}, encuadre) is False, "zoom de más pero el vuelo sigue"
+    assert mr.encuadre_listo({"razon": "sin-mapa"}, encuadre) is False
+    assert mr.encuadre_listo({"razon": "sin-modulo"}, encuadre) is False
+    assert mr.encuadre_listo(None, encuadre) is False
+
+
+class PaginaEncuadre:
+    """Página de mentira con reloj propio: evaluate devuelve los estados del mapa en orden."""
+
+    def __init__(self, estados):
+        self.estados = list(estados)
+        self.reloj = 0.0
+        self.esperas = []
+        self.consultas = 0
+
+    def evaluate(self, expr):
+        self.consultas += 1
+        return self.estados.pop(0) if len(self.estados) > 1 else self.estados[0]
+
+    def wait_for_timeout(self, ms):
+        self.esperas.append(ms)
+        self.reloj += ms / 1000
+
+
+def test_esperar_encuadre_confirma_el_fin_del_vuelo_antes_de_cerrar_bytes(monkeypatch):
+    """El contenido usable llega mientras el vuelo animado sigue en curso: la confirmación
+    exige zoom objetivo con tolerancia y mapa sin movimiento, nada antes."""
+    encuadre = mr.RUTAS["mapa-capas-santiago"]["encuadre"]
+    pagina = PaginaEncuadre([
+        {"zoom": 4.6, "moviendo": True},   # arranque del vuelo
+        {"zoom": 9.8, "moviendo": True},  # a medio camino
+        {"zoom": 10.5, "moviendo": True},  # cerca, aún volando (y bajo la tolerancia)
+        {"zoom": 11.0, "moviendo": False},  # vuelo terminado: recién ahora listo
+    ])
+    monkeypatch.setattr(mr.time, "monotonic", lambda: pagina.reloj)
+    assert mr.esperar_encuadre(pagina, encuadre, 3000) is True
+    assert pagina.consultas == 4
+    assert pagina.esperas == [100, 100, 100]
+
+
+def test_esperar_encuadre_no_supera_el_tope_del_paso(monkeypatch):
+    encuadre = mr.RUTAS["mapa-capas-santiago"]["encuadre"]
+    # sin mapa (o sin módulo): el tope vence exacto, con la última encuesta recortada
+    pagina = PaginaEncuadre([{"razon": "sin-mapa"}])
+    monkeypatch.setattr(mr.time, "monotonic", lambda: pagina.reloj)
+    assert mr.esperar_encuadre(pagina, encuadre, 350) is False
+    assert pagina.esperas == [100, 100, 100, 50]
+    assert pagina.reloj == pytest.approx(0.35)  # ni un milisegundo por encima del tope
+    assert pagina.consultas == 5
+
+
+def test_calmar_red_de_ruta_espera_el_encuadre_antes_de_la_red_quieta(monkeypatch):
+    """Sin el encuadre confirmado, la ventana de red quieta podría cerrar los bytes antes
+    del pedido real de teselas: primero el vuelo, después la red."""
+    base = "https://brasa.example"
+    seg = SeguimientoConErrores({})
+    opciones = {"timeoutMs": 5000}
+    orden = []
+    monkeypatch.setattr(mr, "esperar_encuadre",
+                        lambda page, encuadre, tope: orden.append(("encuadre", encuadre, tope)) or True)
+    monkeypatch.setattr(mr, "esperar_red_quieta",
+                        lambda seg_, page, base_, grupos, tope: orden.append(("red", tuple(grupos), tope)) or True)
+    inicio = time.monotonic()
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas-santiago"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones, paso="directo") is True
+    assert [paso for paso, *_ in orden] == ["encuadre", "red"]
+    assert orden[0][1] == {"zoom": 11}
+    assert orden[1][1] == ("infraestructura", "viento")
+    assert all(0 < p[2] <= opciones["timeoutMs"] for p in orden), "cada espera dentro del paso"
+    assert seg.errores == []
+    # mapa-capas (encuadre de país) no declara encuadre: solo espera la red quieta
+    orden.clear()
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones, paso="directo") is True
+    assert [paso for paso, *_ in orden] == ["red"]
+
+
+def test_calmar_red_de_ruta_registra_timeout_de_encuadre_como_medidor(monkeypatch):
+    """El encuadre que no llega tampoco se ignora: timeout explícito del medidor, muestra
+    incompleta, tiempo util intacto (los bytes del encuadre pueden estar truncados)."""
+    base = "https://brasa.example"
+    seg = SeguimientoConErrores({})
+    opciones = {"timeoutMs": 2000}
+    red = []
+    monkeypatch.setattr(mr, "esperar_encuadre", lambda *a, **k: False)
+    monkeypatch.setattr(mr, "esperar_red_quieta", lambda *a, **k: red.append(1) or True)
+    inicio = time.monotonic()
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas-santiago"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones, paso="directo") is False
+    assert red == [], "sin encuadre confirmado no se cierra la red: los bytes aún no se pidieron"
+    assert len(seg.errores) == 1
+    error = seg.errores[0]
+    assert error["tipo"] == "encuadre" and error["clase"] == "medidor" and error["paso"] == "directo"
+    assert "encuadre" in error["texto"] and "truncados" in error["texto"]
+    # sin nombre de paso no registra (lo llama quien sabe qué paso medir)
+    assert mr.calmar_red_de_ruta(mr.RUTAS["mapa-capas-santiago"], seg, PaginaQuieta(), base, "util",
+                                inicio, opciones) is False
+    assert len(seg.errores) == 1
+
+
+class PaginaPreparar:
+    """Página de mentira para preparar(): registra lo que se calienta, sin navegador."""
+
+    def goto(self, url, wait_until=None, timeout=None):
+        self.url = url
+
+    def wait_for_function(self, criterio, timeout=None, arg=None):
+        pass
+
+    def wait_for_timeout(self, ms):
+        pass
+
+
+def test_preparar_calienta_tambien_el_encuadre_y_la_red_de_las_capas(monkeypatch):
+    """La preparación de caché caliente/offline espera primero el encuadre y después la red
+    quieta de las capas: sin eso mediría sin los bytes que aún viajaban y, en offline, la
+    capa de infraestructura fallaría al montar (y su reversión reescribe el hash del criterio)."""
+    base = "https://brasa.example"
+    llamadas = []
+    monkeypatch.setattr(mr, "esperar_encuadre",
+                        lambda page, encuadre, tope: llamadas.append(("encuadre", encuadre, tope)) or True)
+    monkeypatch.setattr(mr, "esperar_red_quieta",
+                        lambda seg, page, b, grupos, tope: llamadas.append(("red", tuple(grupos), tope)) or True)
+    opciones = {"timeoutMs": 5000}
+    assert mr.preparar(object(), PaginaPreparar(), base, "mapa-capas-santiago", opciones,
+                       SeguimientoFalso({})) is True
+    assert [paso for paso, *_ in llamadas] == ["encuadre", "red"]
+    assert llamadas[0][1] == {"zoom": 11}
+    assert llamadas[1][1] == ("infraestructura", "viento")
+    assert all(0 < p[2] <= opciones["timeoutMs"] for p in llamadas)
+    # el encuadre que no llega no da por buena la preparación: se reporta, no se disimula
+    monkeypatch.setattr(mr, "esperar_encuadre", lambda *a, **k: False)
+    assert mr.preparar(object(), PaginaPreparar(), base, "mapa-capas-santiago", opciones,
+                       SeguimientoFalso({})) is False
+    # la red que no queda quieta tampoco
+    monkeypatch.setattr(mr, "esperar_encuadre", lambda *a, **k: True)
+    monkeypatch.setattr(mr, "esperar_red_quieta", lambda *a, **k: False)
+    assert mr.preparar(object(), PaginaPreparar(), base, "mapa-capas-santiago", opciones,
+                       SeguimientoFalso({})) is False
+    # una ruta sin encuadre ni redQuieta no espera nada de esto en la preparación
+    llamadas.clear()
+    monkeypatch.setattr(mr, "esperar_encuadre", lambda *a, **k: llamadas.append(1) or True)
+    monkeypatch.setattr(mr, "esperar_red_quieta", lambda *a, **k: llamadas.append(1) or True)
+    assert mr.preparar(object(), PaginaPreparar(), base, "mapa", opciones, SeguimientoFalso({})) is True
+    assert llamadas == []
+
+
+def test_grilla_viento_sintetica_forma_exacta_y_representativa():
+    from datetime import datetime, timezone
+
+    from backend import windgrid
+
+    import perf_server as ps
+
+    ahora = datetime(2026, 11, 1, 12, 0, tzinfo=timezone.utc)
+    grilla = ps.grilla_viento_sintetica(ahora, windgrid)
+    # forma exacta de backend/windgrid.py: grilla 1° regular completa con forma compacta
+    assert grilla["computed_at"] == "2026-11-01T12:00:00Z"
+    assert grilla["step"] == windgrid.STEP_DEG
+    forma = windgrid.grid_shape(windgrid.grid_points(), windgrid.STEP_DEG)
+    assert (grilla["lat0"], grilla["lon0"], grilla["rows"], grilla["cols"]) == forma
+    assert grilla["source"] == windgrid.WIND_SOURCE
+    n = len(grilla["points"])
+    assert n == len(grilla["speed"]) == len(grilla["dir"]) == len(grilla["gust"])
+    # pasos +0/+3/+6/+12 h completos: sin huecos, el tamaño medido es el real
+    assert list(grilla["steps"]) == ["0", "3", "6", "12"]
+    for paso in grilla["steps"].values():
+        assert len(paso["speed"]) == n and paso["at"].endswith("Z")
+        assert all(v is not None for v in paso["speed"]), "la grilla sintética no deja huecos"
+    # subgrilla fina de 0,25° (misma forma, sin points) y sin NaN
+    fina = grilla["fine"]
+    assert fina["step"] == windgrid.FINE_STEP_DEG and fina["bbox"] == list(windgrid.FINE_BBOX)
+    forma_fina = windgrid.grid_shape(windgrid.fine_grid_points(), windgrid.FINE_STEP_DEG)
+    assert (fina["lat0"], fina["lon0"], fina["rows"], fina["cols"]) == forma_fina
+    assert len(fina["speed"]) == fina["rows"] * fina["cols"]
+    texto = json.dumps(grilla, allow_nan=False)
+    # representativa: no la grilla mínima de 3 puntos que siembra el benchmark
+    assert len(texto) > 20000, "el tamaño debe representar la grilla real, no tres puntos"
+    # determinista: mismo epoch ⇒ misma grilla byte a byte (base y candidata idénticas)
+    assert json.dumps(ps.grilla_viento_sintetica(ahora, windgrid), allow_nan=False) == texto
 
 
 # ------------------------------------------------------------------ REND-02 PR2: /api/config retrasada

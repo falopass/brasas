@@ -26,6 +26,13 @@ def revision(repo: Path) -> str:
     ).strip()
 
 
+# Rutas medidas por defecto en cada job del workflow de rendimiento (REND-02): portada,
+# listado de riesgo, mapa solo, mapa con capas en el encuadre de país, mapa con capas
+# acercado a Santiago (lat/lon/z: teselas de infraestructura reales del encuadre) y
+# páginas de contenido. Cualquier otra ruta de medir_rendimiento.RUTAS requiere --ruta.
+RUTAS_CI_PREDETERMINADAS = "mi-zona,riesgo,mapa,mapa-capas,mapa-capas-santiago,temporada,preparate,quehago,mas"
+
+
 def esperar_servidor(proceso: subprocess.Popen, url: str, timeout: float = 60) -> None:
     fin = time.monotonic() + timeout
     while time.monotonic() < fin:
@@ -52,7 +59,7 @@ def main(argv=None) -> int:
     p.add_argument("--cache", required=True)
     p.add_argument("--retraso-config-ms", type=int, default=0)
     p.add_argument("--verificar-config", action="store_true")
-    p.add_argument("--ruta", default="mi-zona,riesgo,mapa,temporada,preparate,quehago,mas")
+    p.add_argument("--ruta", default=RUTAS_CI_PREDETERMINADAS)
     args = p.parse_args(argv)
     if not 0 <= args.retraso_config_ms <= 10000:
         p.error("--retraso-config-ms debe estar entre 0 y 10000")

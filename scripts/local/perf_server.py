@@ -20,16 +20,20 @@ Contrato con el workflow del agente principal:
 
 El sembrado usa el mismo ``benchmark_api.sembrar`` del checkout de este script, pero importa
 el ``backend`` del repositorio servido: los datos nacen con el código que después los sirve.
+Tras el sembrado (o la reutilización), la grilla de viento de ``kv`` se reescribe con una
+sintética determinista de tamaño representativo (``grilla_viento_sintetica``): la mínima de
+la siembra haría invisible el costo real de ``/api/wind/grid``.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 RUTA_SCRIPT = Path(__file__).resolve()
@@ -46,6 +50,44 @@ def retrasar_config(app, retraso_ms: int):
             await asyncio.sleep(retraso_ms / 1000)
         await app(scope, receive, send)
     return atender
+
+
+# ---------------------------------------------------------------- grilla de viento (REND-02 tanda 5)
+
+def _fila_pronostico_sintetica(i: int, ahora: datetime, horas: int = 26) -> dict:
+    """Fila horaria sintética (la forma que consume ``windgrid._series``): velocidad,
+    dirección y ráfaga aritméticas fijas por celda y hora, deterministas y sin red.
+
+    Cubre de -1 h a +24 h alrededor de ``ahora`` para que los pasos +0/+3/+6/+12 h
+    encuentren siempre su hora a menos de 90 minutos (``_MAX_DESFASE_S``).
+    """
+    tiempos = [(ahora + timedelta(hours=h - 1)).strftime("%Y-%m-%dT%H:%M") for h in range(horas)]
+    return {
+        "time": tiempos,
+        "wind_speed_10m": [round(4 + ((i + h) % 28) + 0.4 * (h % 5), 1) for h in range(horas)],
+        "wind_direction_10m": [(23 * i + 17 * h) % 360 for h in range(horas)],
+        "wind_gusts_10m": [round(10 + ((3 * i + 2 * h) % 24), 1) for h in range(horas)],
+    }
+
+
+def grilla_viento_sintetica(ahora: datetime, windgrid) -> dict:
+    """Grilla de viento sintética determinista con la forma exacta de ``backend/windgrid.py``.
+
+    La siembra del benchmark deja en ``kv`` una grilla mínima (3 puntos, sin ráfagas ni
+    pasos): la capa de viento enciende, pero el tamaño medido de ``/api/wind/grid`` no
+    representa la grilla real (1° país + subgrilla fina + 4 pasos) y el costo de la capa
+    saldría desvirtuado. Esta grilla se construye con las funciones del propio repositorio
+    servido (``grid_points``/``fine_grid_points``/``build_grid``/``build_fine_grid``) y
+    filas sintéticas: mismo epoch (``BRASA_BENCH_EPOCH``, igual en base y candidata) ⇒
+    misma grilla byte a byte en ambos servidores, sin ninguna llamada de red.
+    """
+    base = windgrid.grid_points()
+    fina = windgrid.fine_grid_points()
+    filas_base = [_fila_pronostico_sintetica(i, ahora) for i in range(len(base))]
+    filas_finas = [_fila_pronostico_sintetica(i, ahora) for i in range(len(fina))]
+    return windgrid.build_grid(
+        base, filas_base, ahora,
+        fine=windgrid.build_fine_grid(fina, filas_finas, ahora))
 
 
 def _base_propia(ruta_db: Path) -> bool:
@@ -122,6 +164,19 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("perf_server: base sembrada anterior, se reusa (use --resembrar para rehacerla)", flush=True)
 
+    # REND-02 tanda 5: grilla de viento con forma y tamaño representativos (la de la siembra
+    # es mínima). Se reescribe siempre —también al reusar una base— para que base y candidata
+    # sirvan exactamente la misma grilla sintética del bench, marcada como tal en el arranque.
+    from backend import windgrid as windgrid_servido
+    from backend.db import Database
+
+    db = Database(ruta_db)
+    try:
+        db.kv_set("windgrid", json.dumps(grilla_viento_sintetica(epoch, windgrid_servido), ensure_ascii=False))
+        db.kv_set("windgrid_at", epoch.strftime("%Y-%m-%dT%H:%M:%SZ"))
+    finally:
+        db.close_all()
+
     # App real del checkout servido, con todo lo externo bloqueado en 503 explícito.
     from backend import main as modulo_principal
 
@@ -135,7 +190,8 @@ def main(argv: list[str] | None = None) -> int:
     # Contrato de disponibilidad: solo GET /ping. Ninguna ruta de la API se precalienta.
     print(
         f"perf_server LISTO: http://{args.host}:{args.port} "
-        f"(sonda: GET /ping; externos: bloqueados con 503; scheduler: apagado)",
+        f"(sonda: GET /ping; externos: bloqueados con 503; scheduler: apagado; "
+        f"windgrid: sintética del bench, igual en base y candidata)",
         flush=True,
     )
     try:

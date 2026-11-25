@@ -64,6 +64,8 @@ posibles por paso: `util`, `fallo` (estado explícito de fallo del producto) y `
 |---|---|---|
 | mi-zona `/#/mi-zona` | `#zona-b #add-place` o `.ember-hero`, acción principal o estado del lugar | — |
 | mapa `/#/mapa` | `#map-listas h2` (las listas llegan con datos) | `#map-carga-err .callout-warn`, `#map-err .callout-warn` |
+| mapa-capas `/#/mapa?capas=focos,viento,infraestructura` | listas del mapa y red quieta de infraestructura/viento | mismos fallos del mapa |
+| mapa-capas-santiago `/#/mapa?capas=focos,viento,infraestructura&lat=-33.45&lon=-70.66&z=11` | listas del mapa, encuadre acercado y red quieta de infraestructura/viento | mismos fallos del mapa |
 | riesgo `/#/riesgo` | `#r-search` (solo en el render con pronóstico) | `.callout-warn [data-retry]` |
 | casos `/#/casos` | `.chips-region` | `.callout-warn [data-retry]` |
 | caso-penco-2026 `/#/casos/penco-lirquen-2026` | `.player` o `.callout.c-nota` | `#case-err .callout-warn` |
@@ -94,6 +96,13 @@ timeouts quedan en la muestra con su clase:
 - `esperado` — sin señal: respuesta 503 sintética del service worker o red caída en modo offline (el comportamiento offline se mide, no se culpa).
 - `medidor` — falla propia del instrumento.
 
+Las rutas con capas esperan una ventana de red quieta de 500 ms, dentro del
+tope del paso, después del contenido usable. Esa espera no cambia el tiempo
+usable registrado. Si no se confirma, se conserva un timeout `redQuieta`
+de clase `medidor`: la muestra queda incompleta porque sus bytes pueden
+estar truncados. La preparación de caché caliente/offline espera también
+las capas antes de cortar la red; una preparación fallida se informa.
+
 Mediana y peor se calculan **solo con muestras completas** (todos los pasos `util`); el
 conteo de incompletas **invalida la comparación** de ese escenario y ruta, con sus motivos
 en el informe. Las muestras incompletas siguen en el JSON con su duración y estado.
@@ -104,6 +113,14 @@ en el informe. Las muestras incompletas siguen en el JSON con su duración y est
   servidas por red; las servidas desde disco o por el service worker se reportan aparte
   (`bytesCache`). No se suman como bytes decodificados: CDP no entrega el tamaño
   decodificado por pedido. Los duplicados (una misma URL pedida más de una vez) se cuentan.
+- La quinta tanda separa esos bytes y pedidos en `infraestructura`, `viento`,
+  `teselasMapa`, `datosEstaticos`, `api`, `app` y `otros`. Los grupos suman
+  los totales de cada muestra; los informes conservan mediana y peor de
+  muestras completas. Las teselas externas bloqueadas cuentan pedidos, no bytes.
+- El servidor efímero reemplaza la grilla mínima del benchmark por una grilla
+  sintética determinista de forma representativa (1° país, subgrilla 0,25°
+  y pasos +0/+3/+6/+12 h), construida con las funciones del backend servido.
+  Base y candidata usan el mismo epoch, sin consultas meteorológicas externas.
 - Limitación documentada: las peticiones que el service worker hace por su cuenta pueden
   no aparecer en la sesión CDP de la página; se capturan las que pasan por el target de
   página (con `fromServiceWorker` marcado) y nada más.
@@ -178,7 +195,8 @@ La matriz completa disponible en el CLI es grande. Desde la segunda tanda,
 el workflow de PR ejercita dos dispositivos, red/CPU normales y caché fría,
 con `/api/config` normal o retrasado 3.000 ms. El dispatch completo habilita
 los ocho perfiles de dispositivo/red/CPU y las tres cachés, en jobs secuenciales.
-El orquestador selecciona siete rutas; las demás requieren `--ruta`.
+El orquestador selecciona nueve rutas, incluidas las dos rutas con capas;
+las demás requieren `--ruta`.
 Eso no equivale a la matriz integral del encargo: los escenarios que siguen
 pendientes no se dan por aprobados. Cada job conserva informes y capturas.
 
@@ -309,6 +327,37 @@ Es una línea base de los escenarios declarados, no una mejora de rendimiento
 ni aceptación de la matriz completa. La segunda tanda se compara contra
 `358980d` (merge de la primera).
 REND-02 completo sigue abierto.
+
+### Quinta tanda: infraestructura equivalente, pendiente de CI
+
+La capa opcional reemplaza el archivo nacional por un índice de metadatos y
+100 teselas de 1°. Cada punto conserva sus seis campos; cada línea conserva
+todos sus vértices y atributos y se copia en las teselas de su caja envolvente.
+El cliente deduplica líneas por su índice original. Las pruebas comparan las
+huellas de los 15.210 puntos, 2.009 líneas y metadatos con el artefacto nacional
+de `b65bbb4`, anterior a la partición, además de comprobar los bordes e islas.
+
+El contrato de error no cambia: si el índice o una tesela del encuadre no
+llega, el lote incompleto no se publica y la capa se revierte con el aviso
+que ya existía, como con el archivo único. La revisión de interfaz propuso
+conservar las teselas que sí llegaron y mostrar una señal persistente de
+encuadre incompleto; eso modifica avisos, así que queda para el PR
+independiente con revisión geográfica y de seguridad que exige el encargo.
+Cada lote lleva su número: un fallo de un encuadre ya superado no apaga la
+capa mientras un lote más nuevo sigue en vuelo.
+
+Se conserva la política anual de frescura del índice, que corresponde a toda
+la partición. No cambian las fuentes, licencias, precisión ni cobertura.
+La medición comparada y el peso del build servido siguen pendientes del CI;
+las cifras de archivos en disco no prueban una mejora del navegador.
+
+El [primer CI estándar](https://github.com/falopass/brasas/actions/runs/45612789739)
+aprobó pytest y flujos de punta a punta, pero falló una prueba JS que esperaba
+tres puntos de un escenario con dos filas, y la revisión a 320 px con movimiento
+reducido detectó desborde durante la salida del esqueleto. La prueba ahora
+comprueba las dos coordenadas y la línea deduplicada; la salida elimina la escala
+solo con movimiento reducido, sin relajar el detector. Revisión UX estática
+aprobada; la reproducción y el peso de la revisión corregida siguen pendientes de CI.
 
 ### Resultado de la segunda tanda
 

@@ -53,8 +53,9 @@ CADUCIDAD_DIAS = {
     "regiones.geojson": 365,
     "comunas-index.json": 365,
     "localidades.json": 365,
-    # Infraestructura crítica (MAPA-181): foto anual de OSM + DEIS, carga diferida al encender la capa.
-    "infraestructura/chile.json": 365,
+    # Infraestructura crítica (MAPA-181): foto anual de OSM + DEIS; el índice lleva la fecha
+    # de toda la partición en teselas (REND-02) que el mapa pide por encuadre desde zoom 10.
+    "infraestructura/indice.json": 365,
     # Dos compuestos MOD13Q1 de 16 días: igual que la cadencia declarada en CADENCIA
     # de scripts/local/cobertura_datos.py (el sondeo semanal abre el issue cuando vence).
     "vegetacion-sequedad.json": 32,
@@ -69,6 +70,7 @@ EXENTOS = {
     "privacidad.json": "texto legal versionado con la app, no una foto de datos: cambia cuando cambia la política",
     "licencias.json": "atribución de las capas, espejo de docs/FUENTES.md: texto curado, no una foto de datos",
     "mascara-norte.json": "cada celda declara su propio revisar_el (INV-25/DET-45)",
+    "infraestructura/t/*.json": "teselas de infraestructura/indice.json: caducan con su fetched_at, se regeneran juntas",
 }
 
 # Qué regenera cada foto (va en la tabla y en el cuerpo del issue).
@@ -87,7 +89,7 @@ REGENERA = {
     "regiones.geojson": "python scripts/build_territory.py",
     "comunas-index.json": "python scripts/build_territory.py",
     "localidades.json": "python scripts/build_localidades.py",
-    "infraestructura/chile.json": "python scripts/local/build_infraestructura.py",
+    "infraestructura/indice.json": "python scripts/local/build_infraestructura.py",
     "vegetacion-sequedad.json": "python scripts/actualizar_sequedad_vegetacion.py",
 }
 
