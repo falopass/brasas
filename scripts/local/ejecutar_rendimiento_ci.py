@@ -93,7 +93,7 @@ def main(argv=None) -> int:
                 "--revision-candidata", revision(args.candidate_repo),
                 "--hash-datos", "base:" + hashes["base"],
                 "--hash-datos", "candidata:" + hashes["candidata"],
-            ])
+            ], env={**os.environ, "BRASA_BENCH_CLIENT_IPS": "1"})
     finally:
         for proceso in procesos:
             proceso.terminate()

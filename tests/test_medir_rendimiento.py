@@ -42,6 +42,19 @@ def muestra(ms, estado="util", *, errores=None, fcp=None, lcp=None, bytes_red=10
 
 # ------------------------------------------------------------------ perfiles y rutas
 
+def test_clientes_ci_aislados_sin_modificar_despliegues(monkeypatch):
+    monkeypatch.delenv("BRASA_BENCH_CLIENT_IPS", raising=False)
+    assert mr.cabeceras_cliente_ci("http://127.0.0.1:8001") == {}
+    monkeypatch.setenv("BRASA_BENCH_CLIENT_IPS", "1")
+    primera = mr.cabeceras_cliente_ci("http://127.0.0.1:8001")
+    segunda = mr.cabeceras_cliente_ci("http://127.0.0.1:8002")
+    assert primera != segunda
+    assert primera["X-Forwarded-For"].startswith("127.1.")
+    for base in ("https://brasa.example", "https://127.0.0.1:8001",
+                 "http://127.0.0.1:9000", "http://127.0.0.1.example:8001"):
+        assert mr.cabeceras_cliente_ci(base) == {}
+
+
 def test_perfiles_de_la_matriz():
     assert mr.DISPOSITIVOS["movil"] == {"ancho": 390, "alto": 844, "tactil": True, "esMovil": True, "escala": 2}
     assert mr.DISPOSITIVOS["escritorio"]["ancho"] == 1280 and mr.DISPOSITIVOS["escritorio"]["alto"] == 900

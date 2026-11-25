@@ -31,6 +31,14 @@ independiente**. En la comparación, cada par de muestras se mide en orden alter
 base/candidata y luego candidata/base — para cancelar el deriva de la máquina, siempre
 sobre la misma instancia de Chromium.
 
+El orquestador de CI asigna una IP sintética de loopback distinta por contexto,
+mediante `X-Forwarded-For` en los servidores efímeros `127.0.0.1:8001/8002`.
+Uvicorn confía solo en el proxy de loopback. Así las altas de dispositivos de
+muestras independientes no agotan entre todas el cupo de una única IP.
+Los límites del backend siguen activos, incluso dentro de cada muestra.
+Este modo requiere `BRASA_BENCH_CLIENT_IPS=1`, que solo establece el orquestador;
+no se aplica a las URL públicas. Las cabeceras contienen solo IP sintética.
+
 ### Pasos por ruta
 
 1. **directo**: primer acceso a la URL completa (incluidas URLs profundas como

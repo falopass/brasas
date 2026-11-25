@@ -44,6 +44,7 @@ solo corre como script.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import statistics
@@ -56,6 +57,7 @@ from urllib.parse import urlparse
 
 MIN_MUESTRAS = 5
 PASOS = ('directo', 'desdePortada', 'reingreso')
+_CLIENTES_CI = itertools.count(1)
 
 # Fuentes externas de la interfaz (teselas del mapa e imagery satelital): fuera del
 # control del despliegue. Por defecto se bloquean igual en base y candidata para no
@@ -801,6 +803,18 @@ def nueva_muestra(base: str, escenario: dict, ruta_id: str, numero: int) -> dict
     }
 
 
+def cabeceras_cliente_ci(base: str) -> dict:
+    """Cada contexto representa una IP distinta solo en los servidores efímeros de CI."""
+    url = urlparse(base)
+    if os.environ.get('BRASA_BENCH_CLIENT_IPS') != '1' or url.scheme != 'http' or \
+            url.hostname != '127.0.0.1' or url.port not in (8001, 8002):
+        return {}
+    numero = next(_CLIENTES_CI)
+    if numero >= 65536:
+        raise ValueError('demasiados clientes sintéticos en una corrida')
+    return {'X-Forwarded-For': f'127.1.{numero // 256}.{numero % 256}'}
+
+
 def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: int, opciones: dict, dir_capturas: Path) -> dict:
     """Una muestra: un contexto nuevo e independiente con todos los pasos de la ruta."""
     ruta = RUTAS[ruta_id]
@@ -811,7 +825,8 @@ def medir_contexto(browser, base: str, escenario: dict, ruta_id: str, numero: in
     ctx = browser.new_context(
         viewport={'width': disp['ancho'], 'height': disp['alto']}, has_touch=disp['tactil'],
         is_mobile=disp['esMovil'], device_scale_factor=disp['escala'], locale='es-CL',
-        timezone_id='America/Santiago', service_workers='allow')
+        timezone_id='America/Santiago', service_workers='allow',
+        extra_http_headers=cabeceras_cliente_ci(base))
     page = None
     try:
         instalar_rutas(ctx, opciones)

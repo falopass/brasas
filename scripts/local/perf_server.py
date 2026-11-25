@@ -126,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     try:
-        uvicorn.run(modulo_principal.app, host=args.host, port=args.port, log_level="warning")
+        uvicorn.run(modulo_principal.app, host=args.host, port=args.port, log_level="warning",
+                    proxy_headers=True, forwarded_allow_ips="127.0.0.1")
     finally:
         restaurar_proveedores()
         restaurar_reintentos()

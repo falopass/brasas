@@ -2,13 +2,16 @@
 
 Se prueba lo puro: percentiles por rango más cercano, gate (p95 <= 2 500 ms, sin errores,
 mínimo 20 muestras), contadores de SQL y de externos (sin parámetros ni URLs sensibles),
-congelamiento de reloj/uuid, siembra determinista, huella estable y veredictos de cuerpos.
+congelamiento de reloj/uuid, siembra determinista, huella estable, veredictos de cuerpos
+y el contrato CLI padre/hijo (bandera ``--samples``, dest ``samples``).
 Ninguna prueba arranca servidores ni procesos: el hijo del benchmark corre solo en CI manual.
 """
 
 from __future__ import annotations
 
+import inspect
 import json
+import re
 import sys
 import threading
 import uuid
@@ -344,6 +347,49 @@ def test_parser_con_los_valores_del_contrato():
         benchmark_api.plantilla_de(rid)
     args2 = benchmark_api._parser().parse_args(["--muestras", "5", "--escala", "demo"])
     assert args2.samples == 5
+
+
+def test_contrato_del_hijo_solo_toca_atributos_que_el_parser_define():
+    """Regresión: el hijo accede a ``args.<dest>`` del parser, nunca a la bandera cruda.
+
+    El parser define ``--samples`` con dest ``samples``; un ``args.muestras`` en el hijo
+    hacía fallar la creación del fixture con AttributeError (el ``errorFixture`` del CI).
+    """
+    fuente = inspect.getsource(benchmark_api._correr_hijo)
+    usados = sorted(set(re.findall(r"args\.(\w+)", fuente)))
+    assert usados, "el hijo dejó de leer args: revisar este test"
+    dests = {accion.dest for accion in benchmark_api._parser()._actions}
+    for nombre in usados:
+        assert nombre in dests, f"el hijo usa args.{nombre} pero el parser no lo define"
+    assert "samples" in usados  # el dest real de --samples/--muestras
+
+
+def test_padre_invoca_al_hijo_con_la_bandera_canonica_de_samples():
+    """El padre (``correr_repo``) pasa ``--samples`` al hijo: el dest del parser, no el alias."""
+    fuente = inspect.getsource(benchmark_api.correr_repo)
+    assert '"--samples", str(muestras)' in fuente
+    assert '"--muestras"' not in fuente
+
+
+def test_las_invocaciones_del_hijo_parsean_con_el_contrato_real():
+    """Las líneas que el padre arma para el hijo existen en el parser, con o sin --samples."""
+    parser = benchmark_api._parser()
+    # El fixture no recibe --samples: el dest tiene default y el hijo no puede explotar.
+    args = parser.parse_args(["--hijo", "--repo", "/repo", "--rol", "fixture",
+                              "--escala", "demo", "--fixture-dir", "/f"])
+    assert args.hijo and args.rol == "fixture" and args.samples == 20
+    # Restauración y medición: tal como las arma correr_repo, con la bandera canónica.
+    args = parser.parse_args(["--hijo", "--repo", "/repo", "--rol", "restauracion",
+                              "--ruta", "estado", "--samples", "20", "--escala", "demo",
+                              "--fixture-dir", "/f"])
+    assert args.ruta == "estado" and args.samples == 20
+    for rol in benchmark_api.ROLES:
+        args = parser.parse_args(["--hijo", "--repo", "/repo", "--rol", rol, "--ruta", "salud",
+                                  "--samples", "20", "--escala", "demo", "--fixture-dir", "/f"])
+        assert args.rol == rol and args.samples == 20
+    # El alias --muestras sigue vigente para uso manual: cae en el mismo dest, sin atributo propio.
+    args = parser.parse_args(["--muestras", "7"])
+    assert args.samples == 7 and not hasattr(args, "muestras")
 
 
 def test_unir_url():

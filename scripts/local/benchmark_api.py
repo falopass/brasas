@@ -871,7 +871,7 @@ def _correr_hijo(args) -> dict:
 
         resultado: dict = {
             "repo": str(repo), "rol": args.rol, "ruta": args.ruta, "escala": args.escala,
-            "reloj": EPOCA.isoformat(), "muestras_pedidas": args.muestras,
+            "reloj": EPOCA.isoformat(), "muestras_pedidas": args.samples,
         }
 
         if args.rol == "fixture":
@@ -903,7 +903,7 @@ def _correr_hijo(args) -> dict:
                 sonda = HiloSonda(svc.db, contador_sql)
                 sonda.start()
                 try:
-                    resultado.update(_medir_caliente(activo, ruta, args.muestras, contador_sql, contador_ext))
+                    resultado.update(_medir_caliente(activo, ruta, args.samples, contador_sql, contador_ext))
                 finally:
                     sonda.detener()
                     sonda.join(5)
@@ -918,13 +918,13 @@ def _correr_hijo(args) -> dict:
                     resultado["muestras"] = [medida]
                     resultado["resumen"] = resumen_muestras([medida])
                 elif args.rol == "caliente":
-                    resultado.update(_medir_caliente(activo, ruta, args.muestras, contador_sql, contador_ext))
+                    resultado.update(_medir_caliente(activo, ruta, args.samples, contador_sql, contador_ext))
                 elif args.rol == "contienda":
                     from backend.geo import territory
                     hilo = HiloIngesta(svc.db, contador_sql, territory(), EPOCA)
                     hilo.start()
                     try:
-                        resultado.update(_medir_caliente(activo, ruta, args.muestras, contador_sql, contador_ext))
+                        resultado.update(_medir_caliente(activo, ruta, args.samples, contador_sql, contador_ext))
                     finally:
                         hilo.detener()
                         hilo.join(10)
@@ -1014,7 +1014,7 @@ def correr_repo(repo: Path, out_dir: Path, muestras: int, escala: str, rutas_ids
     if con_restauracion:
         print(f"[benchmark] {repo.name}: restauración...", flush=True)
         restauro = _subproceso(
-            repo, ["--rol", "restauracion", "--ruta", "estado", "--muestras", str(muestras),
+            repo, ["--rol", "restauracion", "--ruta", "estado", "--samples", str(muestras),
                    "--escala", escala, "--fixture-dir", str(fixture_dir)], timeout_s)
         datos_rest = restauro.get("restauracion") or {}
         if restauro.get("error") or not datos_rest.get("medido"):
@@ -1028,7 +1028,7 @@ def correr_repo(repo: Path, out_dir: Path, muestras: int, escala: str, rutas_ids
         for rol in ROLES:
             print(f"[benchmark] {repo.name}: {rid}/{rol} ({muestras} muestras)...", flush=True)
             resultado_hijo = _subproceso(
-                repo, ["--rol", rol, "--ruta", rid, "--muestras", str(muestras), "--escala", escala,
+                repo, ["--rol", rol, "--ruta", rid, "--samples", str(muestras), "--escala", escala,
                        "--fixture-dir", str(fixture_dir)], timeout_s)
             resultados[rid][rol] = resultado_hijo
             (out_dir / "benchmark.json").write_text(json.dumps({
