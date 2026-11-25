@@ -1841,7 +1841,6 @@ export async function render(container, params) {
     exZone.innerHTML = String(html`${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}`);
     if (exZone.dataset) exZone.dataset.zonesKey = zonesKey;
     if (prev && zones[prev]) exZone.value = prev;
-    else if (exZone.options.length) exZone.value = exZone.options[0].value;
   }
 
   const cargaErrEl = container.querySelector('#map-carga-err');

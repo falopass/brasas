@@ -43,7 +43,7 @@ let resyncDiferido = null; // una sola comprobaciÃ³n de clave diferida por sesiÃ
 async function suscripcionConClave(registration, key) {
   const sub = await registration.pushManager.getSubscription();
   if (!key || (sub && mismaClave(sub, key))) return sub;
-  await sub.unsubscribe().catch(() => {});
+  if (sub) await sub.unsubscribe().catch(() => {});
   return registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
 }
 

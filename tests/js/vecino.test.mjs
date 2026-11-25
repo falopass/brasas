@@ -141,6 +141,7 @@ describe('«Que me avisen a mí también»: el reintento tras un fallo de avisos
   };
   let previos;
   let follow;
+  let estado;
   let container;
   let peticiones;
   let follows;
@@ -199,11 +200,12 @@ describe('«Que me avisen a mí también»: el reintento tras un fallo de avisos
       alClic: null,
       addEventListener(tipo, fn) { if (tipo === 'click') this.alClic = fn; },
     };
+    estado = { hidden: true, textContent: '' };
     container = {
       scrollTop: 0,
       innerHTML: '',
       contains: () => false,
-      querySelector: (sel) => (sel === '#follow' ? follow : (sel === '#reshare' ? { addEventListener() {} } : null)),
+      querySelector: (sel) => ({ '#follow': follow, '#follow-estado': estado, '#reshare': { addEventListener() {} } })[sel] ?? null,
     };
   });
 
@@ -230,20 +232,22 @@ describe('«Que me avisen a mí también»: el reintento tras un fallo de avisos
     await follow.alClic(); // primer clic: guarda el lugar, los avisos no se activan
     assert.equal(follows, 1);
     assert.equal(follow.disabled, false); // queda habilitado como reintento de los avisos
-    assert.equal(follow.textContent, 'Lugar guardado; avisos no activados');
+    assert.equal(follow.textContent, 'Reintentar avisos');
+    assert.equal(estado.hidden, false);
+    assert.equal(estado.textContent, 'Lugar guardado; avisos no activados');
     assert.deepEqual(peticiones, ['/api/shared/tok', '/api/shared/tok/follow']);
     await follow.alClic(); // segundo clic: reintento de SOLO los avisos
     assert.equal(follows, 1, 'el POST follow no se repite: el lugar ya quedó guardado en el servidor');
     assert.deepEqual(peticiones, ['/api/shared/tok', '/api/shared/tok/follow'],
       'la activación falla antes de enviar nada: no hay más peticiones');
     assert.equal(follow.disabled, false);
-    assert.equal(follow.textContent, 'Lugar guardado; avisos no activados'); // sigue siendo reintento
+    assert.equal(follow.textContent, 'Reintentar avisos'); // sigue siendo reintento
   });
 
   test('el texto feliz queda reservado para el alta completa, aunque el lugar sea nuevo', async () => {
     await vistaVecino.mount(container, { rest: ['tok'] });
     await follow.alClic();
-    assert.equal(follow.textContent, 'Lugar guardado; avisos no activados');
+    assert.equal(estado.textContent, 'Lugar guardado; avisos no activados');
     assert.notEqual(follow.textContent, 'Listo: te avisaremos de este lugar');
   });
 });

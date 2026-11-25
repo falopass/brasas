@@ -53,12 +53,12 @@ function configEnModal(alLlegar) {
 /** Cuando un repintado elimina o deshabilita el control enfocado, el foco no debe caer al
  *  documento (accesibilidad): va a `preferido` si existe y es visible —puede ser la nota
  *  asociada, focusable con tabindex="-1"— o al siguiente control visible enfocable a partir
- *  de `referencia` en el orden del DOM. */
+ *  de `referencia`, con vuelta al inicio del alcance. */
 export function reenfocar(preferido, alcance, referencia) {
   if (preferido && preferido.offsetParent !== null && preferido.disabled !== true) return preferido.focus({ preventScroll: true });
   const orden = [...alcance.querySelectorAll('a[href], button, input, select, textarea, [tabindex]')];
   const desde = referencia ? orden.findIndex((el) => referencia.contains(el)) : -1;
-  orden.slice(desde + 1).find((el) => !el.disabled && el.tabIndex >= 0 && el.offsetParent !== null)?.focus({ preventScroll: true });
+  [...orden.slice(desde + 1), ...orden.slice(0, desde + 1)].find((el) => !el.disabled && el.tabIndex >= 0 && el.offsetParent !== null)?.focus({ preventScroll: true });
 }
 
 export const PHONES = [
@@ -427,7 +427,7 @@ export async function alertChannels({ generacion } = {}) {
   // Solo un número es generación válida (un evento de click no lo es: esa es una apertura
   // pedida por la persona y abre igual que siempre). Un refresco solo abre si su generación
   // sigue siendo la del modal en pantalla.
-  const vale = () => generacion == null || (typeof generacion === 'number' && generacion === generacionModal);
+  const vale = () => generacion == null || (typeof generacion === 'number' && generacion === generacionModal && $('#modal').open);
   let config = store.get('config');
   let me = { push: false, telegram: false };
   try { me = await api.me(); } catch { /* sin token aún */ }
@@ -464,7 +464,7 @@ export async function alertChannels({ generacion } = {}) {
     // la persona cierre o cambie de modal durante las esperas; el refresco solo se hace si
     // este modal sigue en pantalla —no se reabre «Recibir alertas» ni se roba el foco—.
     const miGeneracion = generacionModal;
-    const viva = () => generacionModal === miGeneracion;
+    const viva = () => generacionModal === miGeneracion && $('#modal').open;
     vincularTelegram(body);
     body.querySelector('#ch-push')?.addEventListener('click', async (e) => {
       const btn = e.currentTarget;
@@ -764,11 +764,10 @@ export function reportForm(preset = null, fotoCompartida = null) {
     let turnstileResolve = null; let turnstileReject = null;
     const forma = body.querySelector('#report-form');
     const turnstileHost = body.querySelector('#rf-turnstile');
-    // Generación viva (UX/seg): dialog.close oculta sin desconectar, así que la vida se
-    // prueba por generación. Cerrar o repintar a mitad de montaje o envío invalida lo pendiente.
+    // Generación para repintados; dialog.open es síncrono, el evento close llega después.
     const dialog = $('#modal');
     const miGeneracion = generacionModal;
-    const viva = () => generacionModal === miGeneracion;
+    const viva = () => generacionModal === miGeneracion && dialog.open && forma.isConnected;
     let desafio = null; // cancela el temporizador del desafío en curso al cerrar el modal
     let montajeKey = null; let montaje = null; let montajeSeq = 0;
     const invalidarMontaje = () => { montajeSeq += 1; montaje = montajeKey = null; retirarWidgetFormulario(); };

@@ -173,22 +173,19 @@ describe('render incremental de web/js/views/mapa.js (PERF-10)', () => {
     assert.match(container.querySelector('#map-listas').innerHTML, /Biobío/, 'las listas dinámicas se actualizan');
   });
 
-  test('sincroniza #ex-zone cuando llegan las zonas, sin pisarlo si tiene el foco activo', async () => {
+  test('sincroniza #ex-zone cuando llegan las zonas, también con el foco activo (REND-02)', async () => {
     const container = crearContenedor();
     await render(container, {});
 
     const exZone = container.querySelector('#ex-zone');
     assert.equal(exZone.innerHTML, '');
 
-    // Con foco activo en #ex-zone, el repintado no lo reemplaza.
+    // La configuración puede llegar con el selector enfocado: las opciones se reconcilian en
+    // el mismo nodo (no se reemplaza el select, así el foco no se pierde).
     globalThis.document.activeElement = exZone;
     store.set('config', { zones: { maule: { label: 'Maule', bbox: [-72, -36, -70, -34] } } });
     await render(container, {});
-    assert.equal(exZone.innerHTML, '', 'con el foco activo no se reescribe #ex-zone');
-
-    // Al perder el foco, el siguiente render actualiza sus opciones.
-    globalThis.document.activeElement = null;
-    await render(container, {});
+    assert.equal(container.querySelector('#ex-zone'), exZone);
     assert.match(exZone.innerHTML, /value="maule"/);
     assert.equal(exZone.dataset.zonesKey, 'maule');
   });

@@ -199,10 +199,12 @@ class RetencionConfig:
     no bloqueante: NO mide latencia (medir_rendimiento.py la mide con el retraso real
     del servidor y sin retener nada).
 
-    Límite duro: api.js aborta la petición a los 12 s y pedirConfig NO reintenta tras
-    un abort (solo tras 503): la retención total de un contexto debe quedar muy por
-    debajo de ese tope. Los timeout_ms de las esperas son límites de fallo, no esperas
-    fijas: en un arranque sano cada elemento aparece en milisegundos.
+    Límite duro: api.js corta la petición a los 12 s (AbortSignal.timeout) y ese TIMEOUT
+    se reintenta con pausa creciente (api.js reintenta TIMEOUT igual que los 503): la
+    retención total de un contexto debe quedar muy por debajo del tope, para que la
+    respuesta de la config retenida llegue dentro de su propia petición. Los timeout_ms
+    de las esperas son límites de fallo, no esperas fijas: en un arranque sano cada
+    elemento aparece en milisegundos.
     """
 
     def __init__(self):
@@ -317,9 +319,26 @@ class Bitacora:
         except Exception:
             return
         if "content security policy" in texto.lower():
-            self.error("producto", tipo="csp", texto=texto[:400])
-        else:
-            self.error(mr.clase_texto(texto), tipo="consola", texto=texto[:400])
+            self.error("producto", tipo="csp", texto=texto[:400])  # una violación de CSP siempre es del producto
+            return
+        # «Failed to load resource: net::ERR_FAILED» no trae la URL en el texto: sin ella,
+        # las teselas que este PROPIO harness aborta se clasificaban «producto» (texto sin
+        # origen) y tiraban el gate sinErroresProducto del primer CI con retraso 3000. La
+        # clasificación precisa usa la ubicación del mensaje (la URL del recurso que
+        # falló): lo que el harness bloquea —externas abortadas o el mock del proveedor—
+        # es «bloqueado», igual que en requestfailed; todo lo demás conserva la
+        # clasificación por texto. Nada se omite del informe.
+        try:
+            url = mensaje.location.url if mensaje.location else ""
+        except Exception:
+            url = ""
+        if url:
+            host = (urlparse(url).hostname or "").lower()
+            es_mock = any(host == origen or host.endswith("." + origen) for origen in MOCKS_EXTERNOS)
+            if mr.es_externa(url) or es_mock:
+                self.error("bloqueado", tipo="consola", url=url, texto=texto[:400])
+                return
+        self.error(mr.clase_texto(texto), tipo="consola", texto=texto[:400])
 
 
 def ciclo_modal(page, timeout_ms, numero) -> dict:
@@ -348,6 +367,42 @@ def esperar_config(bitacora: Bitacora, page, segundos_max: float) -> bool:
     return True
 
 
+def esperar_visible(page, selector, timeout_ms, reintentos=None):
+    """Espera un elemento visible con un presupuesto total, reintentando fallos instantáneos.
+
+    Fallo real del primer CI con retraso 3000: en el arranque frío el service worker de la
+    app instala rápido (el SHELL va por loopback) y su ``clients.claim()`` toma el control
+    de la página apenas unos ms después de DCL; esa toma de control invalida el contexto de
+    ejecución del documento y un ``wait_for_selector`` puntual muere al instante
+    («Execution context was destroyed») en vez de esperar su plazo. Con la espera de la
+    portada ese fallo se tragaba como False: portadaUtilizable en falso con portadaMs
+    137,7 (la espera murió antes de empezar) mientras la portada misma pintaba y quedaba
+    usable (el mismo botón respondió en el contexto B y medir_rendimiento midió la portada
+    en ~0,5 s con el mismo retraso; allí no pasa porque su espera tras goto reintenta
+    ``page.evaluate`` cada 100 ms).
+
+    El reintento vive dentro del MISMO presupuesto: ni un ms más de plazo ni gates más
+    blandas (mismo selector, mismo ``state="visible"``). Un fallo instantáneo reintenta
+    con el plazo restante; un timeout real agota el presupuesto y devuelve False. Si
+    ``reintentos`` es un dict, acumula el total de reintentos y el último error: queda en
+    el informe, nada se oculta.
+    """
+    fin = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < fin:
+        restante_ms = max(1, int((fin - time.monotonic()) * 1000))
+        try:
+            page.wait_for_selector(selector, state="visible", timeout=restante_ms)
+            return True
+        except Exception as fallo:
+            if time.monotonic() + 0.05 >= fin:
+                return False  # el presupuesto se agotó esperando: timeout real, sin reintentos ni plazo extra
+            if reintentos is not None:
+                reintentos["total"] = reintentos.get("total", 0) + 1
+                reintentos["ultimo"] = f"{type(fallo).__name__}: {fallo}"[:200]
+            time.sleep(0.05)  # fallo instantáneo (contexto invalidado al arrancar): no girar en vacío
+    return False
+
+
 def renders_turnstile(page) -> list:
     """Los renders que registró el mock del proveedor antibot (vacío si nunca cargó)."""
     try:
@@ -374,12 +429,13 @@ def correr(args, browser) -> dict:
         except Exception:
             pass  # la captura es apoyo del informe, no un contrato
 
+    reintentos_espera = {"total": 0, "ultimo": None}
+
     def esperar(page, selector, timeout_ms=None):
-        try:
-            page.wait_for_selector(selector, state="visible", timeout=timeout_ms or paso_ms)
-            return True
-        except Exception:
-            return False
+        # La espera de la portada es la primera tras goto: es la que se cruza con la toma
+        # de control del service worker de la app (ver esperar_visible). Mismo presupuesto,
+        # mismos gates; solo sobrevive el fallo instantáneo del contexto.
+        return esperar_visible(page, selector, timeout_ms or paso_ms, reintentos_espera)
 
     def nuevo_contexto():
         disp = mr.DISPOSITIVOS[args.dispositivo]
@@ -559,6 +615,10 @@ def correr(args, browser) -> dict:
         "nota": "mock efímero del proveedor, sin PII ni escrituras reales; el fixture no publica "
                 "clave de sitio, ver pendientes",
     }
+    # Transparencia del reintento: cuántas esperas murieron al instante (contexto invalidado
+    # por la toma de control del service worker al arrancar) y se reintentaron dentro de
+    # su mismo presupuesto. Con la portada usable esto suele ser 1 por contexto frío.
+    eventos["esperaReintentos"] = dict(reintentos_espera)
 
     pendientes = list(PENDIENTES_FIJOS)
     if contratos.get("portadaAntesDeConfig") is not True:

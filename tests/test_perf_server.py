@@ -8,8 +8,10 @@ y todos los mensajes (scope, receive, send, cuerpo, respuesta) pasan intactos.
 Nada de esto levanta servidor ni proceso: las apps son falsas, las llamadas son directas
 al wrapper y el reloj se controla parcheando asyncio.sleep. También quedan aquí las
 pruebas puras de config_check.py (guarda de loopback, retención de /api/config,
-política de envíos —solo el alta anónima del dispositivo se permite— y evaluación de
-contratos), que importa Playwright solo al correr.
+política de envíos —solo el alta anónima del dispositivo se permite—, evaluación de
+contratos, espera que sobrevive a la invalidación de contexto del claim del service
+worker al arrancar y consola clasificada por la URL del recurso), que importa Playwright
+solo al correr.
 """
 from __future__ import annotations
 
@@ -375,3 +377,162 @@ def test_config_check_contratos_duros_y_de_ventana_pendiente():
     assert cc.contratos_incumplidos(roto, exigir=False) == ["mapaUtilizable"]
     # un contrato duro sin medir también incumple: nada pasa por omisión
     assert "configRespondio" in cc.contratos_incumplidos(dict(sanos, configRespondio=None), exigir=False)
+
+
+# --------------------------------------------- config_check: espera que sobrevive al claim del SW
+
+class RelojFalso:
+    """Reloj de mentira: monotonic solo avanza cuando el código duerme (determinista)."""
+
+    def __init__(self):
+        self._ahora = 1000.0
+
+    def monotonic(self):
+        return self._ahora
+
+    def sleep(self, segundos):
+        self._ahora += segundos
+
+
+class PaginaEspera:
+    """Page de Playwright de mentira: registra cada intento y decide su resultado.
+
+    ``fallos`` es la cola de excepciones instantáneas de wait_for_selector; con ``agotar``
+    cada intento consume su timeout completo y lanza TimeoutError (el elemento jamás aparece)."""
+
+    def __init__(self, reloj, fallos=(), agotar=False):
+        self.reloj, self.fallos, self.agotar = reloj, list(fallos), agotar
+        self.intentos = []
+
+    def wait_for_selector(self, selector, state="visible", timeout=None):
+        self.intentos.append({"selector": selector, "state": state, "timeout": timeout})
+        if self.fallos:
+            raise self.fallos.pop(0)
+        if self.agotar:
+            self.reloj._ahora += (timeout or 0) / 1000  # esperó el plazo entero sin ver nada
+            raise TimeoutError(f"Timeout {timeout}ms exceeded.")
+        return object()
+
+
+def test_config_check_espera_reintenta_el_fallo_instantaneo_del_arranque(monkeypatch):
+    """Fallo del primer CI con retraso 3000: la primera espera de la portada tras goto murió
+    al instante (la toma de control del service worker de la app invalida el contexto de
+    ejecución del documento) y se tragaba como False con la portada pintada y usable.
+    esperar_visible reintenta ese fallo instantáneo dentro del MISMO presupuesto: mismo
+    selector, mismo state="visible" (las gates no se relajan) y el plazo restante, nunca más."""
+    reloj = RelojFalso()
+    monkeypatch.setattr(cc, "time", reloj)
+    pagina = PaginaEspera(reloj, fallos=[RuntimeError(
+        "Execution context was destroyed, most likely because of a navigation.")])
+    reintentos = {"total": 0, "ultimo": None}
+    assert cc.esperar_visible(pagina, "#add-place", 3000, reintentos) is True
+    assert len(pagina.intentos) == 2  # el fallo instantáneo se reintentó, no se tragó como falso
+    assert all(i["selector"] == "#add-place" and i["state"] == "visible" for i in pagina.intentos)
+    assert 0 < pagina.intentos[1]["timeout"] < pagina.intentos[0]["timeout"] <= 3000
+    assert reintentos["total"] == 1
+    assert "Execution context was destroyed" in reintentos["ultimo"]
+    # sin diccionario de reintentos también reintenta (el argumento es solo diagnóstico)
+    assert cc.esperar_visible(PaginaEspera(reloj, fallos=[RuntimeError("contexto invalidado")]),
+                              "#add-place", 3000) is True
+
+
+def test_config_check_espera_fallos_instantaneos_repetidos_agotan_el_presupuesto(monkeypatch):
+    """Un elemento que nunca aparece devuelve False dentro del MISMO presupuesto aunque cada
+    intento muera al instante: ni un milisegundo más de espera ni reintentos infinitos."""
+    reloj = RelojFalso()
+    monkeypatch.setattr(cc, "time", reloj)
+    pagina = PaginaEspera(reloj, fallos=[RuntimeError("Execution context was destroyed")] * 999)
+    assert cc.esperar_visible(pagina, "#nada", 3000) is False
+    assert reloj.monotonic() - 1000.0 <= 3.05  # el presupuesto total no se estira
+    assert len(pagina.intentos) > 1  # hubo reintentos...
+    assert pagina.intentos[-1]["timeout"] >= 1  # ...siempre con plazo restante, nunca cero
+
+
+def test_config_check_espera_timeout_real_agota_el_plazo_a_la_primera(monkeypatch):
+    """El timeout de «no apareció» consume el presupuesto completo y devuelve False sin
+    reintentar ni alargar el plazo: el contrato de tiempo es el mismo antes y después."""
+    reloj = RelojFalso()
+    monkeypatch.setattr(cc, "time", reloj)
+    pagina = PaginaEspera(reloj, agotar=True)
+    reintentos = {"total": 0, "ultimo": None}
+    assert cc.esperar_visible(pagina, "#nada", 3000, reintentos) is False
+    assert len(pagina.intentos) == 1  # esperó su plazo entero: sin segundo intento
+    assert 3.0 <= reloj.monotonic() - 1000.0 <= 3.05  # realmente esperó, y solo eso
+    assert reintentos["total"] == 0  # un timeout real no cuenta como reintento
+
+
+# --------------------------------------------- config_check: consola clasificada por su URL
+
+class UbicacionConsola:
+    """location de un mensaje de consola de Playwright: la URL del recurso que falló."""
+
+    def __init__(self, url):
+        self.url = url
+
+
+class ConsolaFake:
+    """Mensaje de consola de Playwright de mentira."""
+
+    def __init__(self, tipo="error", texto="", url=None):
+        self.type = tipo
+        self.text = texto
+        self.location = UbicacionConsola(url) if url else None
+
+
+def test_config_check_consola_de_externas_bloqueadas_es_bloqueado():
+    """Fallo del primer CI con retraso 3000: las cuatro consolas «Failed to load resource:
+    net::ERR_FAILED» de las teselas que el PROPIO harness aborta se clasificaban «producto»
+    (el texto no trae la URL) y tiraban sinErroresProducto. La clasificación precisa usa
+    mensaje.location (la URL del recurso): lo que el harness bloquea —externas abortadas o
+    el mock del proveedor— es «bloqueado», igual que en requestfailed, y sigue en el
+    informe: nada se omite."""
+    bitacora = cc.Bitacora("http://127.0.0.1:8002")
+    for url in ("https://tiles.openfreemap.org/planet",
+                "https://tiles.openfreemap.org/fonts/Noto%20Sans%20Regular/0-255.pbf",
+                "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/MODIS_Terra_CorrectedReflectance_TrueColor",
+                "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/orchestrate/jsch/v1"):
+        bitacora._a_la_consola(ConsolaFake(texto="Failed to load resource: net::ERR_FAILED", url=url))
+    assert [(e["clase"], e["tipo"]) for e in bitacora.errores] == [("bloqueado", "consola")] * 4
+    assert bitacora.errores[0]["url"] == "https://tiles.openfreemap.org/planet"
+
+
+def test_config_check_consola_csp_y_recursos_propios_siempre_producto():
+    """Una violación de CSP es siempre del producto —aunque la consola apunte a un recurso
+    bloqueado— y un fallo de recurso del propio servidor también: la clasificación por URL
+    no relaja nada de eso."""
+    bitacora = cc.Bitacora("http://127.0.0.1:8002")
+    bitacora._a_la_consola(ConsolaFake(
+        texto="Refused to load the image because it violates the following Content Security "
+              'Policy directive: "img-src \'self\'"',
+        url="https://tiles.openfreemap.org/planet"))
+    bitacora._a_la_consola(ConsolaFake(
+        texto="Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        url="http://127.0.0.1:8002/api/observations"))
+    assert [(e["clase"], e.get("tipo")) for e in bitacora.errores] == \
+        [("producto", "csp"), ("producto", "consola")]
+
+
+def test_config_check_consola_sin_ubicacion_conserva_clase_texto():
+    """Consola sin location (o que lance al leerla): misma clasificación de siempre por
+    texto, y el error nunca se pierde. «Failed to load resource» sin URL es del producto."""
+    class ConsolaRota:
+        type = "error"
+        text = "Failed to load resource: net::ERR_FAILED"
+
+        @property
+        def location(self):
+            raise RuntimeError("mensaje ya liberado")
+
+    bitacora = cc.Bitacora("http://127.0.0.1:8002")
+    bitacora._a_la_consola(ConsolaFake(texto="Failed to load resource: net::ERR_FAILED"))
+    bitacora._a_la_consola(ConsolaRota())
+    assert [(e["clase"], e["tipo"]) for e in bitacora.errores] == [("producto", "consola")] * 2
+
+
+def test_config_check_consola_ignora_lo_que_no_es_error():
+    """Solo los «error» de consola se clasifican; warnings y logs no ensucian el informe."""
+    bitacora = cc.Bitacora("http://127.0.0.1:8002")
+    bitacora._a_la_consola(ConsolaFake(tipo="warning", texto="ruido",
+                                       url="https://tiles.openfreemap.org/planet"))
+    bitacora._a_la_consola(ConsolaFake(tipo="log", texto="ruido"))
+    assert bitacora.errores == []
