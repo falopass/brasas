@@ -1,5 +1,6 @@
 /* Service worker y Web Push (VAPID). */
 import { api } from './api.js';
+import { esperarConfig } from './config.js';
 
 const PUSH_PENDING = 'brasa-push-pending';
 const PUSH_PENDING_KEY = '/__push-pending';
@@ -35,15 +36,44 @@ export async function flushPendingSubscription() {
   await cache.delete(PUSH_PENDING_KEY);
 }
 
-/** Reenvía la suscripción vigente: el alta es un UPDATE idempotente por dispositivo, así que es barato. */
+let resyncDiferido = null; // una sola comprobación de clave diferida por sesión, compartida
+
+/** Garantiza una suscripción con la clave fresca: devuelve la vigente si coincide (o no hay
+ *  clave); si difiere o no existe, da de baja la vieja y crea otra. */
+async function suscripcionConClave(registration, key) {
+  const sub = await registration.pushManager.getSubscription();
+  if (!key || (sub && mismaClave(sub, key))) return sub;
+  if (sub) await sub.unsubscribe().catch(() => {});
+  return registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+}
+
+const enviarAlta = async (subscription) => {
+  if (!subscription || disabled) return;
+  const json = subscription.toJSON();
+  await api.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
+};
+
+/** Reenvía la suscripción vigente: el alta es un UPDATE idempotente por dispositivo. */
 async function resyncSubscription() {
   if (!pushEnabled() || disabled) return;
   const registration = await navigator.serviceWorker.ready;
-  const subscription = await registration.pushManager.getSubscription();
-  if (subscription && !disabled) {
-    const json = subscription.toJSON();
-    await api.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
-  }
+  const key = (await esperarConfig({ fresca: true }))?.push?.public_key;
+  if (key) return enviarAlta(await suscripcionConClave(registration, key));
+  // Sin clave fresca aún no se puede comparar (REND-02/seg): se difiere UNA comprobación
+  // compartida al llegar la config fresca (sin bucles ni envíos duplicados) y la vigente
+  // se reenvía igual que siempre.
+  resyncDiferido ??= esperarConfig({ fresca: true, timeoutMs: 120000 })
+    .then((cfg) => { resyncDiferido = null; comprobarClaveDiferida(registration, cfg?.push?.public_key); })
+    .catch(() => { resyncDiferido = null; });
+  return enviarAlta(await registration.pushManager.getSubscription());
+}
+
+/** Comprobación diferida: si la clave fresca difiere de la de la suscripción vigente, se
+ *  re-crea y se reenvía; si coincide o no hay clave, no se envía nada. */
+async function comprobarClaveDiferida(registration, key) {
+  if (!key || !pushEnabled() || disabled) return;
+  const sub = await registration.pushManager.getSubscription();
+  if (sub && !mismaClave(sub, key)) await enviarAlta(await suscripcionConClave(registration, key));
 }
 
 /** Registra el service worker. Si una versión nueva toma el control, `onUpdate` permite ofrecer recargar. */
@@ -109,8 +139,9 @@ export function crearManejadorRecargaSw({ modal, body, yaRecargo, recargar, avis
 /** iPhone/iPad: iPadOS se declara como Mac con pantalla táctil. */
 export const detectIos = (nav = navigator) => /iPad|iPhone|iPod/.test(nav.userAgent) || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1);
 
-/** Estado de los avisos. `env` permite probar la decisión sin navegador; cada pieza ausente se lee del navegador. */
-export async function pushState(env = {}) {
+/** Estado de los avisos, calculado sin esperar nada: lo usa pushState (envuelto en promesa
+ *  para probar sin navegador) y pedirPermisoPush, que necesita el gesto del clic vivo. */
+function pushStateSync(env = {}) {
   const hasServiceWorker = env.hasServiceWorker ?? ('serviceWorker' in navigator);
   const hasPushManager = env.hasPushManager ?? ('PushManager' in window);
   const hasNotification = env.hasNotification ?? ('Notification' in window);
@@ -121,6 +152,24 @@ export async function pushState(env = {}) {
     standalone: env.standalone ?? (matchMedia('(display-mode: standalone)').matches || navigator.standalone === true),
     isIos: env.isIos ?? detectIos(),
   };
+}
+
+/** Estado de los avisos. `env` permite probar la decisión sin navegador; cada pieza ausente se lee del navegador. */
+export async function pushState(env = {}) {
+  return pushStateSync(env);
+}
+
+/** Pide el permiso de notificaciones con el gesto del clic aún vivo: Safari solo muestra el
+ *  diálogo si se pide en el mismo turno del clic, sin awaits antes. Valida soporte y estado
+ *  sin pedir; con permiso ya resuelto no se re-pregunta. Devuelve { problema, permiso }:
+ *  `problema` es null cuando el diálogo va en camino y `permiso` una promesa con el estado.
+ *  `env` permite probarlo sin navegador, como pushState. */
+export function pedirPermisoPush(env = {}) {
+  const state = pushStateSync(env);
+  const problema = pushProblem(state);
+  if (problema || state.permission !== 'default') return { problema, permiso: Promise.resolve(state.permission) };
+  const resultado = Notification.requestPermission(); // llamada síncrona, con el gesto vivo
+  return { problema: null, permiso: Promise.resolve(resultado) };
 }
 
 /** Diagnóstico de por qué no se pueden activar los avisos, con la acción que lo resuelve. */
@@ -143,18 +192,32 @@ export function urlBase64ToUint8Array(base64) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
-export async function enablePush(publicKey) {
+/** Compara, byte a byte, la clave de servidor de la suscripción con la clave pública actual:
+ *  si rotó (VAPID), el servidor ya no podría avisar con la suscripción vieja. Ante cualquier
+ *  duda (sin clave registrada, error), no coincide. */
+function mismaClave(subscription, publicKey) {
+  try {
+    const actual = subscription?.options?.applicationServerKey;
+    if (!actual) return false;
+    const esperada = urlBase64ToUint8Array(publicKey);
+    const bytes = actual instanceof ArrayBuffer ? new Uint8Array(actual) : actual;
+    return bytes?.length === esperada.length && esperada.every((b, i) => b === bytes[i]);
+  } catch { return false; }
+}
+
+export async function enablePush(publicKey, { permiso } = {}) {
   const state = await pushState();
   const problem = pushProblem(state);
   // Si ya está bloqueado (o falta instalar en iOS), pedir permiso otra vez no sirve: se explica cómo arreglarlo.
   if (problem) throw new Error(`${problem.title}: ${problem.help}`);
-  const permission = await Notification.requestPermission();
+  // Si el clic ya pidió el permiso con el gesto vivo (pedirPermisoPush), no se re-pregunta:
+  // Safari exige el gesto y el resultado ya está en camino. Sin `permiso` se pide aquí.
+  const permission = await (permiso ?? Notification.requestPermission());
   if (permission !== 'granted') throw new Error('Debes permitir las notificaciones en el navegador.');
   const registration = await navigator.serviceWorker.ready;
-  let subscription = await registration.pushManager.getSubscription();
-  if (!subscription) {
-    subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
-  }
+  // Una suscripción nacida con otra clave (rotación de VAPID) no sirve: se re-crea con la
+  // actual, sin pedir permiso de nuevo.
+  const subscription = await suscripcionConClave(registration, publicKey);
   const json = subscription.toJSON();
   await api.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
   disabled = false;

@@ -115,7 +115,8 @@ def test_recursos_de_lite_y_lista_cacheables():
 # compartidas; la vista completa sale del arranque).
 # 2026-11-19: +1 — /web/ayudas.html (PROD-08: la guía de ayudas tras el incendio
 # se enlaza desde la vista diferida «Más» y abre sin señal como preguntas.html).
-SHELL_ENTRADAS_HOY = 88
+# 2026-11-25: +1 — /web/js/config.js (REND-02: espera compartida no bloqueante).
+SHELL_ENTRADAS_HOY = 89
 
 
 def test_paginas_del_bloque_de_fallo_en_precache():

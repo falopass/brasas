@@ -1,5 +1,6 @@
 /* BRASA Chile — arranque de la aplicación: rutas, navegación, tema, datos compartidos y hoja móvil. */
 import { api } from './api.js';
+import { marcarConfigFresca } from './config.js';
 import './instalar.js';
 import { detectionsGeoJSON, getMap, initMap, onReady, placesGeoJSON, setData, setTheme } from './map.js';
 import { loadObservations, visibleObservations } from './data.js';
@@ -7,7 +8,7 @@ import { armEnter, scanPass, watchView } from './motion.js';
 import { cachedAge, pillState } from './pildora.js';
 import { clearBadge, crearManejadorRecargaSw, registerServiceWorker } from './push.js';
 import { sondeosMs, store } from './store.js';
-import { applySetting, openEmergency, openSettings } from './ui.js';
+import { applySetting, flushOutbox, openEmergency, openSettings } from './ui.js';
 import { $, ago, debeRecargarVista, storage, toast, yaRecargoSw } from './util.js';
 import zona from './views/zona.js';
 
@@ -439,7 +440,7 @@ async function main() {
   // El índice de comunas no depende del motor (diferido en teléfonos): los buscadores lo necesitan.
   if (window.requestIdleCallback) window.requestIdleCallback(cargarIndiceComunas, { timeout: 4000 });
   else setTimeout(cargarIndiceComunas, 1200);
-  window.addEventListener('online', () => { store.set('online', true); refreshStatus(); });
+  window.addEventListener('online', () => { store.set('online', true); refreshStatus(); if (!frescaLista) pedirConfig(); });
   window.addEventListener('offline', () => {
     store.set('online', false);
     updateLivePill();
@@ -449,28 +450,50 @@ async function main() {
 
   // Con la configuración guardada la vista monta sin esperarla; la fresca llega después.
   // En Cloudflare el backend puede estar despertando (503): se reintenta antes de rendirse.
+  // REND-02/seg: una sola corrida en vuelo (arranque + evento online); la copia guardada
+  // solo pinta y NUNCA apaga los reintentos (503 y TIMEOUT, pausa creciente).
   const copia = storage.get('config');
   if (copia) store.set('config', copia);
-  const pedirConfig = async () => {
-    for (let attempt = 0; attempt < 8; attempt++) {
+  let enVuelo = null; let frescaLista = false;
+  const pedirConfig = () => (enVuelo ??= traer().finally(() => { enVuelo = null; }));
+  const traer = async () => {
+    let pausa = 2500; let deCache = false;
+    for (let i = 0; i < 8; i++) {
+      if (i) await new Promise((r) => setTimeout(r, pausa));
       try {
-        store.set('config', await api.config());
-        storage.set('config', store.get('config'));
-        break;
-      } catch (err) {
-        if (copia) break;
-        if (err.status === 503 && attempt < 7) {
-          $('#live-text').textContent = 'Conectando con BRASA…';
-          $('#live-short').textContent = 'Conectando…';
-          await new Promise((resolve) => setTimeout(resolve, 2500));
+        const fresca = await api.config();
+        if (fresca.cached_at) { // copia del SW (sin señal): pinta, pero no es fresca —pudo rotar claves—
+          deCache = true;
+          store.set('config', fresca);
+          pausa = Math.min(pausa * 2, 20000);
           continue;
         }
+        // La marca va ANTES del store.set: quien espera la fresca (reportes, push) la ve en
+        // ese mismo evento y no confunde la copia guardada con la vigente.
+        marcarConfigFresca();
+        store.set('config', fresca);
+        storage.set('config', fresca);
+        frescaLista = true;
+        flushOutbox(); // sale lo guardado sin señal (promesa compartida: sin envíos dobles)
+        return;
+      } catch (err) {
+        if (err.status === 503 || err.code === 'TIMEOUT') { // backend despertando o red lenta: reintento acotado
+          if (err.status === 503) { $('#live-text').textContent = 'Conectando con BRASA…'; $('#live-short').textContent = 'Conectando…'; }
+          pausa = Math.min(pausa * 2, 20000);
+          continue;
+        }
+        if (!err.status || navigator.onLine === false) return; // offline comprobado: el evento online relanza
         toast(`No se pudo conectar con el servidor de BRASA: ${err.message}`, 'error', 8000);
-        break;
+        return; // error definitivo del servidor: reintentar no ayuda
       }
     }
+    // Agotados los reintentos: con copia pintada no se molesta (ya avisó el «Sin conexión»);
+    // si no hubo nada, un aviso único. El evento online o la próxima apertura reintentan.
+    if (!deCache) toast('No se pudo conectar con el servidor de BRASA: el servidor no respondió. Se volverá a intentar al recuperar la conexión.', 'error', 8000);
   };
-  if (copia) pedirConfig(); else await pedirConfig();
+  // REND-02: la configuración nunca bloquea el arranque; cada consumidor la espera por su
+  // cuenta (esperarConfig) o repinta solo lo suyo cuando llega (store.on).
+  pedirConfig();
   // Acciones que usan el mapa fuera de las vistas de mapa: el clic espera al motor y se
   // reintenta; sin él no harían nada.
   document.addEventListener('click', (e) => {

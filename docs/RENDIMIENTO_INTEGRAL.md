@@ -174,12 +174,20 @@ python scripts/local/comparar_rendimiento.py \
   --hash-datos "$HASH_DATOS" --samples 5
 ```
 
-La matriz completa disponible en el CLI es grande. El workflow de PR ejercita
-dos dispositivos, red/CPU normales y caché fría. El dispatch completo habilita
+La matriz completa disponible en el CLI es grande. Desde la segunda tanda,
+el workflow de PR ejercita dos dispositivos, red/CPU normales y caché fría,
+con `/api/config` normal o retrasado 3.000 ms. El dispatch completo habilita
 los ocho perfiles de dispositivo/red/CPU y las tres cachés, en jobs secuenciales.
 El orquestador selecciona siete rutas; las demás requieren `--ruta`.
 Eso no equivale a la matriz integral del encargo: los escenarios que siguen
 pendientes no se dan por aprobados. Cada job conserva informes y capturas.
+
+En el orquestador, el retraso se aplica con una espera asíncrona en el
+servidor efímero, únicamente a `/api/config`, igual para base y candidata.
+No detiene otras solicitudes y también alcanza los fetch del service worker
+que llegan a la red. Los metadatos registran `retrasoConfigServidor: true`.
+No modifica ni retrasa ninguna API de producción. `--verificar-config` añade
+el recorrido funcional de configuración tardía contra el servidor candidato.
 
 ## API y arranque frío
 
@@ -257,7 +265,7 @@ incidentes en menos de cinco segundos. No se aumenta ningún tope.
 - **Respuesta visible de interacción e INP real**: solo se registra `pointerdown → RAF`.
 - **Memoria de workers** (service worker incluido): las métricas CDP son del hilo principal.
 - **Bytes decodificados por pedido** y **subrequests del SW fuera del target de página**: no alcanzan al instrumento.
-- **`--retraso-config-ms`** solo alcanza cuando el SW todavía no controla la página (primer
+- **`--retraso-config-ms` en el CLI independiente** solo alcanza cuando el SW todavía no controla la página (primer
   acceso): el fetch del SW puede pasar por debajo de la ruta de Playwright. Con caché
   caliente/offline su efecto es parcial; el retraso además serializa el tráfico
   concurrente durante la espera. Es una cobertura limitada, no un escenario de API lenta
@@ -283,5 +291,21 @@ red/caché, filtros de CLI y alias. La corrida real con navegador la ejecuta el 
 de GitHub contra los builds efímeros; la porción descrita también corre en PR.
 No se ejecutan pruebas, builds, servidores ni navegadores en local.
 
-Estado inicial: instrumentación pendiente de validación CI, sin resultados
-publicados ni beneficios demostrados. REND-02 completo sigue abierto.
+### Línea base validada de la primera tanda
+
+[PR #986](https://github.com/falopass/brasas/pull/986), commit candidato `1ea5162`,
+base `fd9ab37`, [CI reproducible](https://github.com/falopass/brasas/actions/runs/45529952629):
+
+- 70/70 muestras candidatas completas (siete rutas × cinco × dos dispositivos),
+  cero errores de producto y comparaciones válidas.
+- Ocho rutas API con cuerpos equivalentes en frío/caliente, veinte muestras
+  calientes; peor p95 entre rutas: 109,629 ms, bajo el gate de 2.500 ms.
+- Build servido: 121,7 KiB gzip bloqueante y 272,2 KiB total, bajo 125/275.
+- Gate existente 2.000 detecciones/200 incidentes aprobado.
+- [CI estándar](https://github.com/falopass/brasas/actions/runs/45529952768)
+  y revisiones UX/seguridad aprobados.
+
+Es una línea base de los escenarios declarados, no una mejora de rendimiento
+ni aceptación de la matriz completa. La segunda tanda se compara contra
+`358980d` (merge de la primera); sus resultados siguen pendientes.
+REND-02 completo sigue abierto.

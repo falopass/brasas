@@ -25,6 +25,7 @@ el ``backend`` del repositorio servido: los datos nacen con el código que despu
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import sqlite3
 import sys
@@ -36,6 +37,15 @@ RUTA_SCRIPT = Path(__file__).resolve()
 # Los datos sembrados van con «bench» en sus ids y nombres: nunca son datos de personas.
 sys.path.insert(0, str(RUTA_SCRIPT.parent))
 import benchmark_api  # noqa: E402 (el harness vive en la misma carpeta)
+
+
+def retrasar_config(app, retraso_ms: int):
+    """Retrasa solo /api/config sin detener otras solicitudes ni saltarse el SW."""
+    async def atender(scope, receive, send):
+        if scope["type"] == "http" and scope.get("path") == "/api/config" and retraso_ms:
+            await asyncio.sleep(retraso_ms / 1000)
+        await app(scope, receive, send)
+    return atender
 
 
 def _base_propia(ruta_db: Path) -> bool:
@@ -84,6 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     # Entorno limpio: sin secretos heredados, sin tareas automáticas.
     for clave in benchmark_api.CLAVES_ENV_LIMPIAS:
         os.environ[clave] = ""  # No permite que load_dotenv reponga credenciales.
+    # Clave de sitio pública de prueba (nunca un secreto): permite montar el widget
+    # Turnstile, que en el navegador es un mock; TURNSTILE_SECRET sigue vacío.
+    os.environ["TURNSTILE_SITE_KEY"] = os.environ.get("BRASA_BENCH_TURNSTILE_SITE_KEY", "")
     os.environ["BRASA_STORAGE_URL"] = ""
     os.environ["BRASA_SCHEDULER"] = "0"
     os.environ["BRASA_DATA_DIR"] = str(data_dir)
@@ -126,7 +139,9 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
     try:
-        uvicorn.run(modulo_principal.app, host=args.host, port=args.port, log_level="warning",
+        app_medida = retrasar_config(
+            modulo_principal.app, int(os.environ.get("BRASA_BENCH_CONFIG_DELAY_MS", "0")))
+        uvicorn.run(app_medida, host=args.host, port=args.port, log_level="warning",
                     proxy_headers=True, forwarded_allow_ips="127.0.0.1")
     finally:
         restaurar_proveedores()

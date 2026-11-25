@@ -68,5 +68,9 @@ artefactos técnicos de CI, nunca promesas ni puntuaciones aisladas.
 
 ## Estado
 
-Primera tanda en implementación. No hay todavía línea base validada ni
-ahorros medidos de este encargo. Las siguientes tandas no están entregadas.
+Primera tanda fusionada en [PR #986](https://github.com/falopass/brasas/pull/986)
+con nueve checks verdes, revisiones de seguridad/UX aprobadas y línea base
+válida para siete rutas, móvil/escritorio, red/CPU normales y caché fría.
+Segunda tanda en implementación: configuración no bloqueante y consumidores
+que mantienen su función cuando llega tarde. No hay ahorros entregados todavía.
+La matriz integral y las tandas 3–9 siguen pendientes.

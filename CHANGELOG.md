@@ -4,6 +4,9 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 ## [Unreleased]
 
+**Configuración del cliente (REND-02, segunda tanda)**
+- La primera pantalla y la navegación ya no esperan a la configuración del servidor. Las acciones que necesitan claves públicas esperan de forma acotada y muestran un error recuperable si no llegan; los formularios y las vistas reciben la configuración tardía sin borrar su estado. La medición comparada con configuración normal y retrasada sigue pendiente de CI.
+
 **Instrumentación técnica (REND-02, primera tanda)**
 - El CI comprueba siempre el contraste de las etiquetas de la pantalla pública, aunque la demostración del día no muestre todos los estados; su texto conserva el contraste mínimo también en tamaños pequeños.
 - El harness de CI aísla la IP sintética de cada muestra de navegador y mantiene los límites del backend activos; el benchmark API usa el mismo contrato de muestras en padre e hijo.

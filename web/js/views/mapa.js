@@ -2,6 +2,7 @@
 import { api, request } from '../api.js';
 import { buscarLugares } from '../buscador.js';
 import { aplicarPreset, CAPAS, capasFromUrl, capasToUrl, CELL_ZOOM_MAX, COROPLETAS, PRESETS, seleccionarCoropleta, senapredPorComuna, toggleCapa } from '../capas.js';
+import { esperarConfig } from '../config.js';
 import { AGE_BINS, basemap, BASEMAPS, CONAF_WUI, detectionsGeoJSON, EMPTY_FC, fitBbox, fly, getGibsDia, getMap, getRasterOpacity, getTerrenoDemFuente, getWmsFecha, INFRA_MINZOOM, isDemFallbackAws, LIGHTNING_COLOR, onReady, pointsGeoJSON, RAIN_COLORS, refreshGibsDate, registrarToque, RISK_COLORS, SENAPRED_COLORS, setBasemap, setData, setGibs, setGibsDia, setMapLoadingLayers, setRain, setRasterOpacity, setRelieve, setRisk, setSenapred, setTerreno3d, setWmsLayer, setWui, show, SMOKE_COLOR, SMOKE_DENSITY_COLOR, terreno3dPermitido, visibleBbox } from '../map.js';
 import { fechaGibs, GIBS, tiempoGibs, WMS_LAYERS, WORLDCOVER_CLASSES } from '../gibs.js';
 import { filtrarPorDistancia, fireIncidents, isReliable, loadObservations, visibleObservations } from '../data.js';
@@ -1753,7 +1754,7 @@ function montarCascaron(container, { hours, f, zones }) {
 
   if (container.dataset) container.dataset.mapaMontado = '1';
   const exZone = container.querySelector('#ex-zone');
-  if (exZone?.dataset) exZone.dataset.zonesKey = Object.keys(zones).join(',');
+  if (exZone?.dataset) exZone.dataset.zonesKey = Object.keys(zones).sort().join(','); // misma normalización que render()
 
   // Elegir un lugar baja la hoja a «peek» o el vuelo queda tras el panel (MAPA-164).
   bindBuscarComuna(container, () => document.dispatchEvent(new CustomEvent('brasa:sheet', { detail: 'peek' })));
@@ -1832,8 +1833,10 @@ export async function render(container, params) {
   if (relEl && document.activeElement !== relEl) relEl.checked = Boolean(f.reliable);
   container.querySelectorAll('[data-sensor]').forEach((b) => b.setAttribute('aria-pressed', String(f.sensors[b.dataset.sensor] !== false)));
   const exZone = container.querySelector('#ex-zone');
-  const zonesKey = Object.keys(zones).join(',');
-  if (exZone && exZone.dataset?.zonesKey !== zonesKey && document.activeElement !== exZone) {
+  // REND-02: la configuración puede llegar con el selector ya enfocado (antes quedaba vacío
+  // para siempre): las opciones se reconcilian en el mismo nodo, conservando la zona elegida.
+  const zonesKey = Object.keys(zones).sort().join(',');
+  if (exZone && exZone.dataset?.zonesKey !== zonesKey) {
     const prev = exZone.value;
     exZone.innerHTML = String(html`${Object.entries(zones).map(([k, z]) => html`<option value="${k}">${z.label}</option>`)}`);
     if (exZone.dataset) exZone.dataset.zonesKey = zonesKey;
@@ -1896,11 +1899,21 @@ async function explore(container) {
   const note = container.querySelector('#ex-note');
   note.textContent = 'Consultando NASA FIRMS…';
   try {
+    // Las zonas (sus límites) viajan en la configuración, que puede seguir de camino
+    // (REND-02): espera acotada y, si no llega, un aviso claro en vez de un error críptico.
+    const cfg = await esperarConfig();
+    if (!cfg) {
+      note.textContent = 'La configuración del servidor aún no llegó. Revisa tu conexión y vuelve a intentarlo.';
+      return;
+    }
+    if (!cfg.zones?.[zone]) {
+      note.textContent = 'Elige una zona del selector y vuelve a intentarlo.';
+      return;
+    }
     const data = await api.explore({ zone, mode: 'historical', start, days });
     setData('explore', pointsGeoJSON(data.points, (p) => ({ id: p.id })));
     show('explore', true);
-    const zones = store.get('config').zones;
-    fitBbox(zones[zone].bbox);
+    fitBbox(cfg.zones[zone].bbox);
     note.textContent = `${fmtNum(data.points.length)} detecciones (${fmtNum(data.in_chile)} en Chile) entre ${data.start} y ${data.end} · ${data.sources.join(', ')}. ${data.notices.join(' ')}`;
     openModal(html`<h2 id="modal-title">Archivo satelital cargado</h2><p>${fmtNum(data.points.length)} detecciones en amarillo sobre el mapa.</p>
       <p class="small muted">Para ver un incendio paso a paso, con gráficos y clima, usa la sección <a href="#/casos">Casos</a>.</p>`);
@@ -1995,7 +2008,10 @@ export default {
     ajustarHojaLectura(container);
     ultimoRefrescoIncidentes = Date.now(); // incidentes y CONAF recién cargados arriba
     // Datos nuevos: se redibuja el panel sin perder el lugar. El estado de las fuentes solo toca su bloque.
-    unsubs = ['observations', 'obsFilter', 'places'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
+    // 'config' (REND-02): las zonas FIRMS y el aviso de GOES llegan con la configuración, a
+    // veces tras el primer pintado; el forEach evita suscripciones acumuladas al remontar.
+    unsubs.forEach((u) => u());
+    unsubs = ['observations', 'obsFilter', 'places', 'config'].map((k) => store.on(k, () => mounted && keepPlace(container, () => render(container, {}))));
     // MAPA-164: la fila de chips y el aviso de fondo sin conexión viven fuera del
     // panel — no se repintan con render, así que cada uno tiene su suscripción.
     unsubs.push(store.on('obsHours', () => mounted && syncMapChips()));

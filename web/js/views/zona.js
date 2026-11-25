@@ -1122,7 +1122,7 @@ function paint(container) {
       : html`<p class="small muted" style="margin-top:10px">No hay avisos recientes.</p>`}
     <h2 class="section">Emergencias</h2>
     ${phonesHtml()}
-    <p class="tiny muted" style="margin-top:14px">BRASA es un proyecto ciudadano. ${dual('Los satélites pueden tardar unos minutos u horas en ver un fuego, y a veces no lo ven (por nubes o humo). Si ves fuego, llama: no esperes a BRASA.', `Usa detecciones de NASA y NOAA, con latencia de minutos a horas, omisiones y falsos positivos. ${config?.firms_configured ? '' : 'Sin clave NASA FIRMS en este servidor: solo GOES.'}`)}</p>`);
+    <p class="tiny muted" style="margin-top:14px">BRASA es un proyecto ciudadano. ${dual('Los satélites pueden tardar unos minutos u horas en ver un fuego, y a veces no lo ven (por nubes o humo). Si ves fuego, llama: no esperes a BRASA.', `Usa detecciones de NASA y NOAA, con latencia de minutos a horas, omisiones y falsos positivos. ${config && !config.firms_configured ? 'Sin clave NASA FIRMS en este servidor: solo GOES.' : ''}`)}</p>`);
 
   container.querySelector('#cambios-cerrar')?.addEventListener('click', () => {
     cambiosVisto = cambiosPrev?.at || true;
@@ -1229,6 +1229,7 @@ let offStatus = null;
 let offObs = null;
 let offText = null;
 let offDetail = null;
+let offConfig = null;
 let onVis = null;
 let onResize = null;
 export default {
@@ -1270,6 +1271,10 @@ export default {
     offObs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
     offText = store.on('text', () => ajustarHojaPortada(container));
     offDetail = store.on('detail', () => ajustarHojaPortada(container));
+    // REND-02: la nota de FIRMS del pie depende de la configuración, que puede llegar
+    // después del primer pintado; el repintado es el mismo que ya usan los demás datos.
+    offConfig?.();
+    offConfig = store.on('config', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
     onVis = () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'volver'); };
     onResize = () => ajustarHojaPortada(container);
     document.addEventListener('visibilitychange', onVis);
@@ -1291,6 +1296,8 @@ export default {
     offText = null;
     offDetail?.();
     offDetail = null;
+    offConfig?.();
+    offConfig = null;
     if (onVis) { document.removeEventListener('visibilitychange', onVis); onVis = null; }
     if (onResize) { window.removeEventListener('resize', onResize); onResize = null; }
     soltarToques.forEach((s) => s());

@@ -1,7 +1,9 @@
 /* Pruebas de web/js/push.js con node:test, sin DOM ni red. */
 import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { clearBadge, crearManejadorRecargaSw, detectIos, disablePush, flushPendingSubscription, pushProblem, pushState, registerServiceWorker, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { clearBadge, crearManejadorRecargaSw, detectIos, disablePush, enablePush, flushPendingSubscription, pushProblem, pushState, registerServiceWorker, urlBase64ToUint8Array } from '../../web/js/push.js';
+import { marcarConfigFresca } from '../../web/js/config.js';
+import { store } from '../../web/js/store.js';
 import { api } from '../../web/js/api.js';
 
 // Entorno de navegador completo; cada prueba cambia solo lo que le importa.
@@ -148,6 +150,229 @@ describe('detectIos', () => {
     assert.equal(detectIos(IPHONE), true);
     assert.equal(detectIos({ userAgent: 'Mozilla/5.0 (iPad; CPU OS 16_0 like Mac OS X)', platform: 'iPad', maxTouchPoints: 5 }), true);
     assert.equal(detectIos({ userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8)', platform: 'Linux armv8l', maxTouchPoints: 5 }), false);
+  });
+});
+
+/* REND-02/seg: la clave pública VAPID viaja en la configuración FRESCA. Una suscripción nacida
+ * con otra clave (el servidor rotó la suya) ya no sirve: el servidor no podría entregar avisos
+ * con ella. Se da de baja y se crea otra con la clave actual, sin pedir permiso de nuevo;
+ * si coincide, la suscripción se reutiliza tal cual. */
+describe('enablePush: la clave pública fresca manda (rotación VAPID)', () => {
+  const UNSUB = '/__push-unsubscribe-pending';
+  // Otra clave de 65 bytes: distinta en un byte, para que la comparación no valga por longitud.
+  const CLAVE_OTRA = (() => { const b = urlBase64ToUint8Array(CLAVE_B64); b[1] ^= 0xff; return b; })();
+
+  let previos;
+  let suscripcion;
+  let unsubscribes;
+  let subscribes;
+  let posts;
+  let borrados;
+
+  const suscripcionCon = (applicationServerKey, endpoint) => ({
+    options: { applicationServerKey },
+    toJSON: () => ({ endpoint, keys: { p256dh: 'p256', auth: 'a' } }),
+    unsubscribe: async () => { unsubscribes += 1; },
+  });
+
+  beforeEach(() => {
+    previos = {
+      window: globalThis.window,
+      navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+      Notification: globalThis.Notification,
+      PushManager: globalThis.PushManager,
+      matchMedia: globalThis.matchMedia,
+      caches: globalThis.caches,
+      pushSubscribe: api.pushSubscribe,
+    };
+    unsubscribes = 0;
+    subscribes = [];
+    posts = [];
+    borrados = [];
+    globalThis.window = globalThis;
+    globalThis.Notification = { permission: 'granted' };
+    globalThis.PushManager = function PushManager() {};
+    globalThis.matchMedia = () => ({ matches: false });
+    globalThis.caches = { open: async () => ({ match: async () => null, delete: async (k) => { borrados.push(k); } }) };
+    const registro = {
+      pushManager: {
+        getSubscription: async () => suscripcion,
+        subscribe: async (opts) => {
+          subscribes.push(opts);
+          return suscripcionCon(opts.applicationServerKey, 'https://push/nueva');
+        },
+      },
+    };
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) rv:1.0', platform: 'Linux x86_64', maxTouchPoints: 0,
+        serviceWorker: { ready: Promise.resolve(registro) },
+      },
+    });
+    api.pushSubscribe = async (payload) => { posts.push(payload); };
+  });
+
+  afterEach(() => {
+    for (const clave of ['window', 'Notification', 'PushManager', 'matchMedia', 'caches']) {
+      if (previos[clave] === undefined) delete globalThis[clave];
+      else globalThis[clave] = previos[clave];
+    }
+    if (previos.navigator) Object.defineProperty(globalThis, 'navigator', previos.navigator);
+    else delete globalThis.navigator;
+    api.pushSubscribe = previos.pushSubscribe;
+  });
+
+  test('suscripción nacida con otra clave: se da de baja y se crea otra con la clave fresca', async () => {
+    suscripcion = suscripcionCon(CLAVE_OTRA, 'https://push/vieja');
+    await enablePush(CLAVE_URL, { permiso: Promise.resolve('granted') });
+    assert.equal(unsubscribes, 1); // la suscripción vieja, con la clave rotada, se retira
+    assert.equal(subscribes.length, 1);
+    assert.equal(subscribes[0].userVisibleOnly, true);
+    assert.deepEqual([...subscribes[0].applicationServerKey], [...urlBase64ToUint8Array(CLAVE_URL)]);
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].endpoint, 'https://push/nueva'); // al servidor llega la suscripción nueva
+    assert.ok(borrados.includes(UNSUB)); // el alta que salió vuelve obsoleta cualquier baja pendiente
+  });
+
+  test('suscripción con la MISMA clave (byte a byte, en ArrayBuffer como la entrega el navegador): se reutiliza', async () => {
+    suscripcion = suscripcionCon(urlBase64ToUint8Array(CLAVE_B64).buffer, 'https://push/vigente');
+    await enablePush(CLAVE_URL, { permiso: Promise.resolve('granted') }); // CLAVE_URL es la misma clave en base64url
+    assert.equal(unsubscribes, 0);
+    assert.equal(subscribes.length, 0); // nada se vuelve a pedir: la suscripción sirve
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].endpoint, 'https://push/vigente');
+  });
+
+  test('sin suscripción: se crea una con la clave fresca y se da de alta', async () => {
+    suscripcion = null;
+    await enablePush(CLAVE_URL, { permiso: Promise.resolve('granted') });
+    assert.equal(unsubscribes, 0);
+    assert.equal(subscribes.length, 1);
+    assert.deepEqual([...subscribes[0].applicationServerKey], [...urlBase64ToUint8Array(CLAVE_URL)]);
+    assert.equal(posts[0].endpoint, 'https://push/nueva');
+  });
+
+  test('suscripción sin clave registrada: ante la duda se resuscribe', async () => {
+    suscripcion = suscripcionCon(undefined, 'https://push/vieja');
+    await enablePush(CLAVE_URL, { permiso: Promise.resolve('granted') });
+    assert.equal(unsubscribes, 1);
+    assert.equal(subscribes.length, 1); // no se afirma nada de lo que no se puede comparar
+  });
+
+  test('permiso denegado en el gesto: no suscribe ni da de alta nada', async () => {
+    suscripcion = null;
+    await assert.rejects(enablePush(CLAVE_URL, { permiso: Promise.resolve('denied') }), /permitir las notificaciones/);
+    assert.equal(subscribes.length, 0);
+    assert.equal(posts.length, 0);
+  });
+});
+
+/* El reenvío de la suscripción vigente (rotación hecha por el service worker o reingreso)
+ * sigue la misma regla: la clave FRESCA manda. resyncSubscription no se exporta: entra por
+ * registerServiceWorker, que la dispara al registrar. Los POST van al mock de api. */
+describe('resync de la suscripción: la clave fresca manda también al reenviar', () => {
+  let previos;
+  let listeners;
+  let controller;
+  let suscripcion;
+  let unsubscribes;
+  let subscribes;
+  let posts;
+
+  beforeEach(() => {
+    previos = {
+      window: globalThis.window,
+      navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+      document: globalThis.document,
+      Notification: globalThis.Notification,
+      PushManager: globalThis.PushManager,
+      matchMedia: globalThis.matchMedia,
+      setInterval: globalThis.setInterval,
+      pushSubscribe: api.pushSubscribe,
+    };
+    listeners = {};
+    controller = null;
+    unsubscribes = 0;
+    subscribes = [];
+    posts = [];
+    const registro = {
+      pushManager: {
+        getSubscription: async () => suscripcion,
+        subscribe: async (opts) => {
+          subscribes.push(opts);
+          return { toJSON: () => ({ endpoint: 'https://push/nueva', keys: { p256dh: 'x', auth: 'y' } }) };
+        },
+      },
+    };
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: {
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) rv:1.0', platform: 'Linux x86_64', maxTouchPoints: 0,
+        serviceWorker: {
+          get controller() { return controller; },
+          addEventListener: (tipo, fn) => { (listeners[tipo] ||= []).push(fn); },
+          register: async () => ({ update: async () => {} }),
+          ready: Promise.resolve(registro),
+        },
+      },
+    });
+    globalThis.window = globalThis;
+    globalThis.Notification = { permission: 'granted' }; // pushEnabled(): hay avisos activados
+    globalThis.PushManager = function PushManager() {};
+    globalThis.matchMedia = () => ({ matches: false });
+    globalThis.document = { addEventListener() {}, visibilityState: 'hidden' };
+    globalThis.setInterval = () => 0; // sin el ciclo de actualización del SW real
+    api.pushSubscribe = async (payload) => { posts.push(payload); };
+    // La clave fresca de esta sesión: resync la espera con esperarConfig({fresca:true}).
+    marcarConfigFresca();
+    store.set('config', { push: { public_key: CLAVE_URL } });
+  });
+
+  afterEach(() => {
+    for (const clave of ['window', 'Notification', 'PushManager', 'matchMedia']) {
+      if (previos[clave] === undefined) delete globalThis[clave];
+      else globalThis[clave] = previos[clave];
+    }
+    if (previos.navigator) Object.defineProperty(globalThis, 'navigator', previos.navigator);
+    else delete globalThis.navigator;
+    if (previos.document === undefined) delete globalThis.document;
+    else globalThis.document = previos.document;
+    globalThis.setInterval = previos.setInterval;
+    api.pushSubscribe = previos.pushSubscribe;
+    store.set('config', null);
+  });
+
+  // registerServiceWorker dispara el resync sin esperarlo: se dejan pasar los microturnos.
+  const asentar = async () => {
+    for (let i = 0; i < 10 && posts.length === 0; i += 1) await new Promise((r) => setTimeout(r, 1));
+  };
+
+  test('suscripción con otra clave: se da de baja, se resuscribe con la fresca y se reenvía la nueva', async () => {
+    const otra = urlBase64ToUint8Array(CLAVE_B64);
+    otra[1] ^= 0xff;
+    suscripcion = { options: { applicationServerKey: otra }, unsubscribe: async () => { unsubscribes += 1; } };
+    await registerServiceWorker(() => {});
+    await asentar();
+    assert.equal(unsubscribes, 1);
+    assert.equal(subscribes.length, 1);
+    assert.deepEqual([...subscribes[0].applicationServerKey], [...urlBase64ToUint8Array(CLAVE_URL)]);
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].endpoint, 'https://push/nueva');
+  });
+
+  test('suscripción con la misma clave: se reenvía la vigente, sin darla de baja ni resuscribir', async () => {
+    suscripcion = {
+      options: { applicationServerKey: urlBase64ToUint8Array(CLAVE_URL) },
+      unsubscribe: async () => { unsubscribes += 1; },
+      toJSON: () => ({ endpoint: 'https://push/vigente', keys: { p256dh: 'v', auth: 'v' } }),
+    };
+    await registerServiceWorker(() => {});
+    await asentar();
+    assert.equal(unsubscribes, 0);
+    assert.equal(subscribes.length, 0);
+    assert.equal(posts.length, 1); // el alta es un UPDATE idempotente: se reenvía tal cual
+    assert.equal(posts[0].endpoint, 'https://push/vigente');
   });
 });
 

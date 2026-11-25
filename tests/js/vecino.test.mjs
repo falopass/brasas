@@ -8,9 +8,12 @@ import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.window ??= { addEventListener() {} }; // no pisar el stub de otra suite
-const { aroundBlock, trendBlock } = await import('../../web/js/views/vecino.js');
+const { default: vistaVecino, aroundBlock, trendBlock } = await import('../../web/js/views/vecino.js');
 const { officialBlock } = await import('../../web/js/views/zona.js');
 const { comunaExposure, comunaExposureOf } = await import('../../web/js/exposure.js');
+const { marcarConfigFresca } = await import('../../web/js/config.js');
+const { store } = await import('../../web/js/store.js');
+const { storage } = await import('../../web/js/util.js');
 
 // comuna.code = 7101 (Talca). Los archivos reales tienen esta forma:
 // censo_2024.json → comunas: [{code, poblacion, viviendas, …}]; interfaz.json → comunas: {codigo: {…}}.
@@ -120,5 +123,131 @@ describe('archivo de datos ausente o sin conexión', () => {
     const exposure = await comunaExposure(7101);
     assert.equal(exposure, null);
     assert.equal(String(aroundBlock(exposure)), '');
+  });
+});
+
+/* seg/UX: «Que me avisen a mí también» guarda el lugar (POST follow) y activa los avisos.
+ * Si los AVISOS fallan, el lugar ya quedó guardado en el servidor: el reintento del botón
+ * repite solo la activación de los avisos, nunca el POST follow. Se monta la vista de verdad
+ * con el contenedor y el document de mentira; fetch y localStorage se simulan dentro del
+ * describe y se restauran, para no pisar a otras suites del proceso (index.js las une). */
+describe('«Que me avisen a mí también»: el reintento tras un fallo de avisos no repite el POST follow', () => {
+  // Resumen compartido mínimo y válido: tranquilo, sin calor cerca, sin comuna (nada extra se pide).
+  const SHARED = {
+    place: { name: 'Casa de mamá', lat: -35.5, lon: -71.5, radius_km: 10, older_adult: true },
+    status: 'tranquilo', cause: null, data_as_of: null, last_alert: null, trend: null,
+    estoy_bien: null, protected_area: null, nearby: [], official: [], dmc_alerts: [],
+    dmc_source: null, comuna: null, risk_days: null,
+  };
+  let previos;
+  let follow;
+  let estado;
+  let container;
+  let peticiones;
+  let follows;
+
+  beforeEach(() => {
+    previos = {
+      window: globalThis.window,
+      document: globalThis.document,
+      navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator'),
+      matchMedia: globalThis.matchMedia,
+      setInterval: globalThis.setInterval,
+      localStorage: globalThis.localStorage,
+    };
+    peticiones = [];
+    follows = 0;
+    const guardado = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (guardado.has(k) ? guardado.get(k) : null),
+      setItem: (k, v) => guardado.set(k, String(v)),
+      removeItem: (k) => guardado.delete(k),
+    };
+    // El POST follow lleva auth: con el token ya guardado no hay alta de dispositivo.
+    storage.set('token', 'tok-dispositivo');
+    globalThis.window = globalThis;
+    // El latido del mapa no arranca (movimiento reducido) y matchMedia responde por consulta.
+    globalThis.matchMedia = (q) => ({ matches: q.includes('prefers-reduced-motion') });
+    // Navegador sin serviceWorker: los avisos no pueden activarse aquí, que es justo el fallo
+    // que deja el botón como reintento. Con la clave fresca presente, el fallo es solo push.
+    Object.defineProperty(globalThis, 'navigator', {
+      configurable: true,
+      value: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64) rv:1.0 Node', platform: 'Linux x86_64', maxTouchPoints: 0 },
+    });
+    globalThis.document = {
+      documentElement: { classList: { add() {}, remove() {} } },
+      addEventListener() {}, removeEventListener() {}, dispatchEvent() {},
+      hidden: true, visibilityState: 'hidden', activeElement: null,
+      getElementById: () => null,
+      querySelector: (sel) => (sel === '#map-legend' ? { innerHTML: '' } : null), // mount escribe ahí
+    };
+    globalThis.setInterval = () => 0; // sin el ciclo de refresco de 2 min
+    globalThis.fetch = async (url, init) => {
+      const camino = String(url);
+      peticiones.push(camino);
+      const json = (body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (camino === '/api/shared/tok/follow') { follows += 1; return json({ created: true }); }
+      if (camino === '/api/shared/tok') return json(SHARED);
+      throw new Error('inesperado: ' + camino);
+    };
+    // La clave de push viaja en la configuración FRESCA de esta sesión (REND-02): con ella el
+    // segundo clic llega a reintentar la activación y se comprueba que no envía nada nuevo.
+    marcarConfigFresca();
+    store.set('config', { push: { public_key: 'BCk-clave-de-prueba-no-real' } });
+    follow = {
+      disabled: false,
+      textContent: 'Que me avisen a mí también',
+      alClic: null,
+      addEventListener(tipo, fn) { if (tipo === 'click') this.alClic = fn; },
+    };
+    estado = { hidden: true, textContent: '' };
+    container = {
+      scrollTop: 0,
+      innerHTML: '',
+      contains: () => false,
+      querySelector: (sel) => ({ '#follow': follow, '#follow-estado': estado, '#reshare': { addEventListener() {} } })[sel] ?? null,
+    };
+  });
+
+  afterEach(() => {
+    delete globalThis.fetch;
+    if (previos.localStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previos.localStorage;
+    if (previos.window === undefined) delete globalThis.window;
+    else globalThis.window = previos.window;
+    if (previos.document === undefined) delete globalThis.document;
+    else globalThis.document = previos.document;
+    if (previos.matchMedia === undefined) delete globalThis.matchMedia;
+    else globalThis.matchMedia = previos.matchMedia;
+    if (previos.navigator) Object.defineProperty(globalThis, 'navigator', previos.navigator);
+    else delete globalThis.navigator;
+    globalThis.setInterval = previos.setInterval;
+    store.set('config', null);
+  });
+
+  test('primer clic guarda el lugar y falla los avisos; el segundo reintenta solo los avisos', async () => {
+    await vistaVecino.mount(container, { rest: ['tok'] });
+    assert.ok(follow.alClic, 'el botón «Que me avisen a mí también» quedó con su manejador');
+    assert.deepEqual(peticiones, ['/api/shared/tok']); // hasta aquí, solo el resumen compartido
+    await follow.alClic(); // primer clic: guarda el lugar, los avisos no se activan
+    assert.equal(follows, 1);
+    assert.equal(follow.disabled, false); // queda habilitado como reintento de los avisos
+    assert.equal(follow.textContent, 'Reintentar avisos');
+    assert.equal(estado.hidden, false);
+    assert.equal(estado.textContent, 'Lugar guardado; avisos no activados');
+    assert.deepEqual(peticiones, ['/api/shared/tok', '/api/shared/tok/follow']);
+    await follow.alClic(); // segundo clic: reintento de SOLO los avisos
+    assert.equal(follows, 1, 'el POST follow no se repite: el lugar ya quedó guardado en el servidor');
+    assert.deepEqual(peticiones, ['/api/shared/tok', '/api/shared/tok/follow'],
+      'la activación falla antes de enviar nada: no hay más peticiones');
+    assert.equal(follow.disabled, false);
+    assert.equal(follow.textContent, 'Reintentar avisos'); // sigue siendo reintento
+  });
+
+  test('el texto feliz queda reservado para el alta completa, aunque el lugar sea nuevo', async () => {
+    await vistaVecino.mount(container, { rest: ['tok'] });
+    await follow.alClic();
+    assert.equal(estado.textContent, 'Lugar guardado; avisos no activados');
+    assert.notEqual(follow.textContent, 'Listo: te avisaremos de este lugar');
   });
 });
