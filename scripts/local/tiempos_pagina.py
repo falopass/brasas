@@ -21,6 +21,18 @@ LCP_LENTO_MS = 2500
 CAMPOS = ("ttfb", "dcl", "carga", "lcp")
 
 
+def marcas_documento(marcas: dict[str, Any], origen_anterior: float, origen_actual: float) -> dict[str, Any]:
+    """Una navegación por hash no produce marcas nuevas del documento.
+
+    El recorrido visual espera un plazo fijo: no es una sonda de contenido
+    utilizable. Las transiciones SPA se miden aparte en medir_rendimiento.py.
+    """
+    if origen_anterior == origen_actual:
+        return {**marcas, **dict.fromkeys(CAMPOS), "alcance": "spa",
+                "limitacion": "Sin marcas nuevas del documento; no mide contenido utilizable."}
+    return {**marcas, "alcance": "documento"}
+
+
 def _mediana(valores: list[float | None]) -> int | None:
     vals = [v for v in valores if v is not None]
     return round(statistics.median(vals)) if vals else None

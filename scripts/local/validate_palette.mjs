@@ -19,6 +19,7 @@
  * a la paleta de la app: cada token de color que declara debe existir en
  * app.css con el mismo valor, y los pares que la pantalla usa deben mantener
  * contraste WCAG: --ink/--muted ≥ 4,5:1 y los --risk-* ≥ 3:1 sobre --bg.
+ * Las etiquetas .tag exigen 4,5:1 también con texto pequeño.
  */
 import { readFileSync } from 'node:fs';
 
@@ -332,6 +333,24 @@ for (const [token, min] of [
   if (c < min) fallas.push(`${token} ${tinta} con contraste ${c.toFixed(2)}:1 < ${min}:1 sobre --bg (${fondo}) en web/css/pantalla.css`);
 }
 console.log(`Pantalla pública: ${Object.keys(pantallaTokens).length} tokens comparados con app.css y ${paresPantalla} pares de contraste revisados.`);
+
+// La demo no siempre muestra todos los estados: validar también los ausentes.
+const pantallaSrc = readFileSync(PANTALLA_CSS, 'utf8');
+for (const estado of ['aviso', 'riesgo', 'urgente', 'tranquilo', 'mejor']) {
+  const regla = pantallaSrc.match(new RegExp(`\\.tag\\.st-${estado}\\s*\\{([^}]+)\\}`))?.[1] ?? '';
+  const fondoTag = regla.match(/background:\s*var\((--[\w-]+)\)/)?.[1];
+  const tintaToken = regla.match(/(?:^|;)\s*color:\s*var\((--[\w-]+)\)/)?.[1];
+  let tintaTag = tintaToken ? pantallaTokens[tintaToken] :
+    regla.match(/(?:^|;)\s*color:\s*(#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?)\s*;/)?.[1];
+  if (tintaTag?.length === 4) tintaTag = '#' + [...tintaTag.slice(1)].map((c) => c + c).join('');
+  if (!tintaTag || !pantallaTokens[fondoTag]) {
+    fallas.push(`no se pudo leer el fondo y la tinta de .tag.st-${estado} en pantalla.css`);
+    continue;
+  }
+  const c = contraste(hex2rgb(tintaTag), hex2rgb(pantallaTokens[fondoTag]));
+  console.log(`Etiqueta ${estado} de pantalla pública: ${c.toFixed(2)}:1 (mínimo 4.5:1).`);
+  if (c < CONTRASTE_TEXTO_MIN) fallas.push(`.tag.st-${estado} con contraste ${c.toFixed(2)}:1 < 4.5:1`);
+}
 
 if (fallas.length) {
   console.error(`\n${fallas.length} problema(s):`);

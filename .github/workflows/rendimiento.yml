@@ -1,0 +1,199 @@
+name: Rendimiento reproducible
+
+on:
+  pull_request:
+    paths:
+      - "web/**"
+      - "backend/**"
+      - "scripts/local/**"
+      - "tests/test_*perf*"
+      - "tests/test_*rendimiento*"
+      - "tests/test_benchmark_api.py"
+      - ".github/workflows/rendimiento.yml"
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Revisión base (SHA, rama o etiqueta, nunca una URL)"
+        required: true
+        default: "fd9ab37"
+      completa:
+        description: "Incluir red lenta, CPU limitada y caché caliente/offline"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rendimiento-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  escenarios:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      cache: ${{ steps.matrix.outputs.cache }}
+    steps:
+      - id: matrix
+        env:
+          COMPLETA: ${{ github.event_name == 'workflow_dispatch' && inputs.completa }}
+        run: |
+          python - <<'PY'
+          import itertools, json, os
+          full = os.environ["COMPLETA"] == "true"
+          profiles = [
+              {"device": d, "network": n, "cpu": c}
+              for d, n, c in itertools.product(
+                  ["movil", "escritorio"],
+                  ["normal", "lenta"] if full else ["normal"],
+                  [1, 4] if full else [1],
+              )
+          ]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write("matrix=" + json.dumps({"include": profiles}) + "\n")
+              f.write("cache=" + ("fria,caliente,offline" if full else "fria") + "\n")
+          PY
+
+  navegador:
+    needs: escenarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      # Un solo navegador/build pesado por tanda.
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.escenarios.outputs.matrix) }}
+    env:
+      BASE_REF: ${{ github.event.pull_request.base.sha || inputs.base_ref }}
+      CANDIDATE_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+      BRASA_SCHEDULER: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.BASE_REF }}
+          path: base
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_REF }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Dependencias comunes y navegador
+        run: |
+          python -m pip install -r candidate/requirements-e2e.txt
+          python -m ruff check candidate/scripts/local/medir_rendimiento.py candidate/scripts/local/comparar_rendimiento.py candidate/scripts/local/benchmark_api.py candidate/scripts/local/perf_server.py candidate/scripts/local/ejecutar_rendimiento_ci.py
+          python -m playwright install --with-deps chromium
+          mkdir -p reports
+          python -m pip freeze > reports/dependencias.txt
+          node --version > reports/node.txt
+      - name: Mismo compilador, builds servidos y presupuestos
+        run: |
+          cmp base/deploy/cloudflare/package-lock.json candidate/deploy/cloudflare/package-lock.json
+          npm ci --prefix base/deploy/cloudflare
+          npm ci --prefix candidate/deploy/cloudflare
+          (cd base && python scripts/local/peso_arranque.py --build) > reports/peso-base.txt
+          (cd candidate && python scripts/local/peso_arranque.py --build) > reports/peso-candidate.txt
+          node base/deploy/cloudflare/build-web.mjs
+          node candidate/deploy/cloudflare/build-web.mjs
+          python - <<'PY'
+          import gzip, hashlib, json
+          from pathlib import Path
+          report = {}
+          for label in ("base", "candidate"):
+              root = Path(label)
+              files = {}
+              for path in sorted((root / "web").rglob("*")):
+                  if path.is_file():
+                      body = path.read_bytes()
+                      files[str(path.relative_to(root))] = {
+                          "rawBytes": len(body),
+                          "gzipBytes": len(gzip.compress(body, mtime=0)),
+                          "sha256": hashlib.sha256(body).hexdigest(),
+                      }
+              report[label] = files
+          Path("reports/assets.json").write_text(json.dumps(report, indent=1))
+          PY
+      - name: Comparación alternada (cinco muestras independientes)
+        env:
+          DEVICE: ${{ matrix.device }}
+          NETWORK: ${{ matrix.network }}
+          CPU: ${{ matrix.cpu }}
+          CACHE: ${{ needs.escenarios.outputs.cache }}
+        run: |
+          python candidate/scripts/local/ejecutar_rendimiento_ci.py \
+            --base-repo "$GITHUB_WORKSPACE/base" \
+            --candidate-repo "$GITHUB_WORKSPACE/candidate" \
+            --out "$GITHUB_WORKSPACE/reports/browser" \
+            --device "$DEVICE" --network "$NETWORK" --cpu "$CPU" --cache "$CACHE"
+      - name: Resumen técnico
+        if: always()
+        run: |
+          echo '### Rendimiento reproducible, sin sondas a producción' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Los escenarios no ejercidos y las muestras fallidas no cuentan como aceptación.' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f reports/browser/comparacion.md ]; then
+            cat reports/browser/comparacion.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          for f in reports/peso-base.txt reports/peso-candidate.txt; do
+            if [ -f "$f" ]; then
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              cat "$f" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rendimiento-${{ matrix.device }}-${{ matrix.network }}-cpu${{ matrix.cpu }}
+          path: reports/
+
+  api:
+    needs: navegador
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BASE_REF: ${{ github.event.pull_request.base.sha || inputs.base_ref }}
+      CANDIDATE_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+      BRASA_SCHEDULER: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.BASE_REF }}
+          path: base
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CANDIDATE_REF }}
+          path: candidate
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r candidate/requirements-dev.txt
+      - name: API fría y caliente, fixture reproducible
+        run: |
+          python candidate/scripts/local/benchmark_api.py \
+            --base-repo "$GITHUB_WORKSPACE/base" \
+            --candidate-repo "$GITHUB_WORKSPACE/candidate" \
+            --out "$GITHUB_WORKSPACE/reports/api" --samples 20 --sin-restauracion
+      - name: Informe API
+        if: always()
+        run: |
+          if [ -f reports/api/informe_comparacion.md ]; then
+            cat reports/api/informe_comparacion.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Gate vigente, 2.000 detecciones y 200 incidentes
+        working-directory: candidate
+        run: python -m pytest -q tests/test_incidents_perf.py
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: rendimiento-api
+          path: reports/

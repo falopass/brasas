@@ -54,3 +54,13 @@ def test_tabla_marks_the_slow_page_and_keeps_every_page():
     assert "morosa" in lineas and "rapida" in lineas
     assert lineas["morosa"].endswith("← lenta")
     assert not lineas["rapida"].endswith("← lenta")
+
+
+def test_hash_navigation_does_not_reuse_document_lcp():
+    marcas = {"ttfb": 40, "dcl": 300, "carga": 900, "lcp": 1200}
+    spa = tiempos_pagina.marcas_documento(marcas, 123.0, 123.0)
+    assert spa["alcance"] == "spa"
+    assert all(spa[k] is None for k in tiempos_pagina.CAMPOS)
+    documento = tiempos_pagina.marcas_documento(marcas, 123.0, 124.0)
+    assert documento["alcance"] == "documento"
+    assert documento["lcp"] == 1200

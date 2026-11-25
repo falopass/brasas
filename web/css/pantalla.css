@@ -73,11 +73,11 @@ a { color: inherit; text-underline-offset: 3px; }
 .list li { background: var(--surface); border-radius: 14px; padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 26px); margin-bottom: 10px; }
 .list .meta { color: var(--muted); font-size: .8em; margin-top: 4px; }
 .tag { display: inline-block; border-radius: 999px; padding: 2px 14px; font-size: .75em; font-weight: 800; margin-right: 8px; }
-.tag.st-aviso { background: var(--risk-moderado); color: #120c09; }
-.tag.st-riesgo { background: var(--risk-alto); color: #120c09; }
+.tag.st-aviso { background: var(--risk-moderado); color: #000; }
+.tag.st-riesgo { background: var(--risk-alto); color: #000; }
 .tag.st-urgente { background: var(--risk-extremo); color: #fff; }
 .tag.st-tranquilo { background: var(--surface-3); color: var(--ink); }
-.tag.st-mejor { background: var(--risk-bajo); color: #120c09; }
+.tag.st-mejor { background: var(--risk-bajo); color: #fff; }
 
 .trend-method { margin: 10px 0 0; color: var(--muted); font-size: clamp(15px, 1.5vw, 22px); }
 
