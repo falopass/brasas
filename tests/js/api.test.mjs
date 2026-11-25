@@ -357,6 +357,24 @@ describe('request con withMeta y api.config: la marca de caché del service work
     assert.equal(r.cachedAt, null);
   });
 
+  test('api.panorama puede pedir la marca del SW sin cambiar la URL', async () => {
+    responses.push(jsonRes(200, { type: 'panorama' }, { 'X-Brasa-Cached-At': FECHA_SW }));
+    const r = await api.panorama(13101, undefined, { withMeta: true });
+    assert.deepEqual(r.body, { type: 'panorama' });
+    assert.equal(r.cachedAt, FECHA_SW);
+    assert.equal(calls[0].url, '/api/panorama?comuna=13101');
+  });
+
+  test('api.placeHistory conserva autenticación al pedir la marca del SW', async () => {
+    storage.set('token', 'device');
+    responses.push(jsonRes(200, { incidents: [] }, { 'X-Brasa-Cached-At': FECHA_SW }));
+    const r = await api.placeHistory('p1', 30, { withMeta: true });
+    assert.deepEqual(r.body, { incidents: [] });
+    assert.equal(r.cachedAt, FECHA_SW);
+    assert.equal(calls[0].url, '/api/places/p1/history?days=30');
+    assert.equal(calls[0].init.headers['X-Brasa-Token'], 'device');
+  });
+
   test('sin withMeta nada cambia: el cuerpo tal cual, aunque el SW mande la marca', async () => {
     responses.push(jsonRes(200, { ok: 2 }, { 'X-Brasa-Cached-At': FECHA_SW }));
     assert.deepEqual(await request('/api/config'), { ok: 2 }); // los demás llamadores no cambian

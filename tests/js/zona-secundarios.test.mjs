@@ -25,9 +25,9 @@ async function conReloj(fn) {
 }
 
 describe('SECUNDARIOS · vigencias conservadoras por fuente', () => {
-  test('historial, lluvia y estación 10 min; aire 30 min; panorama 3 h; oficiales 5 min', () => {
+  test('historial, lluvia, estación y panorama 10 min; aire 30 min; oficiales 5 min', () => {
     assert.equal(TTL(0), 10 * MIN);
-    assert.equal(TTL(1), 3 * 60 * MIN);
+    assert.equal(TTL(1), 10 * MIN);
     assert.equal(TTL(2), 10 * MIN);
     assert.equal(TTL(3), 10 * MIN);
     assert.equal(TTL(4), 30 * MIN);
@@ -46,6 +46,23 @@ describe('pedirSecundario · reutilización entre renders', () => {
     assert.equal(await pedirSecundario(registro, 2, lugar(), f), null);
     assert.equal(pedidos, 1);
   });
+
+  test('una copia del service worker vence desde la fecha guardada, no desde su entrega', () => conReloj(async (reloj) => {
+    const registro = new Map();
+    const visible = new Map();
+    const origen = Date.UTC(2026, 10, 25, 12);
+    reloj.t = origen + 9 * MIN;
+    let pedidos = 0;
+    const f = fila(0, () => {
+      pedidos += 1;
+      return Promise.resolve({ body: { incidents: [] }, cachedAt: new Date(origen).toISOString() });
+    }, visible);
+    await pedirSecundario(registro, 0, lugar(), f);
+    assert.deepEqual(visible.get('p1'), { incidents: [] });
+    reloj.t = origen + 11 * MIN;
+    await pedirSecundario(registro, 0, lugar(), f);
+    assert.equal(pedidos, 2);
+  }));
 
   test('vencida la vigencia se pide de nuevo solo el tipo vencido', () => conReloj(async (reloj) => {
     const registro = new Map();
@@ -67,6 +84,21 @@ describe('pedirSecundario · reutilización entre renders', () => {
     await pedirSecundario(registro, 5, lugar(), f);
     assert.equal(pedidos, 1);
     reloj.t = 6 * MIN;
+    await pedirSecundario(registro, 5, lugar(), f);
+    assert.equal(pedidos, 2);
+  }));
+
+  test('el TTL oficial cuenta desde la descarga de SENAPRED, no desde que llega al navegador', () => conReloj(async (reloj) => {
+    const registro = new Map();
+    const origen = Date.UTC(2026, 10, 25, 12);
+    reloj.t = origen + 4 * MIN; // SENAPRED puede seguir sirviendo la lista vacía hasta cinco minutos
+    let pedidos = 0;
+    const f = fila(5, () => {
+      pedidos += 1;
+      return Promise.resolve({ alerts: [], fetched_at: new Date(origen).toISOString() });
+    });
+    await pedirSecundario(registro, 5, lugar(), f);
+    reloj.t = origen + 6 * MIN; // la copia local no debe ocultar una alerta nueva
     await pedirSecundario(registro, 5, lugar(), f);
     assert.equal(pedidos, 2);
   }));
