@@ -214,10 +214,12 @@ def test_el_ledger_legado_de_work_migra_a_main_sin_rebobinar(tmp_path):
     anterior.close_all()
 
     migrada = Database(path, work_path)
+    assert migrada.one("SELECT used FROM om_day WHERE day = ? AND task = ?", ("2027-01-15", "risk"))["used"] == 300
     with migrada.connect() as conn:
         # Una copia de work más vieja no hace retroceder el valor que ya llegó a main.
         conn.execute(
-            "INSERT INTO main.om_day(day, task, used) VALUES (?,?,?)",
+            "INSERT INTO main.om_day(day, task, used) VALUES (?,?,?) "
+            "ON CONFLICT(day, task) DO UPDATE SET used = excluded.used",
             ("2027-01-15", "risk", 350),
         )
         from backend.db import _migrate_om_day
@@ -896,7 +898,7 @@ def test_el_ledger_avisa_al_respaldo_a_lo_sumo_una_vez_por_ventana(make_client, 
 
     class Respaldo:
         def mark_dirty(self):
-            avisos.append(1)
+            avisos.append(len(avisos) + 1)
 
         async def stop(self):
             pass  # el cierre de la app lo llama; aquí no hay respaldo real
@@ -918,6 +920,11 @@ def test_el_ledger_avisa_al_respaldo_a_lo_sumo_una_vez_por_ventana(make_client, 
 
 # --- re-revisión (segunda ronda): medianoche en el despacho, timeouts, reservas de los
 # --- avisos, liquidación común y borde final del throttle del ledger ---
+
+
+# Los escenarios de medianoche usan cupos a escala 1:100 (60 de 85 en vez de 6.000 de
+# 8.500): una sola petición de 6.000 ubicaciones supera el largo máximo de URL de httpx
+# (`InvalidURL`) y nunca llegaría al transporte.
 
 
 def _reloj_medianoche(monkeypatch, fase: list):
@@ -994,8 +1001,8 @@ def test_el_despacho_tras_medianoche_queda_cubierto_y_contado_una_vez(make_clien
 
     with make_client() as client:
         svc = client.app.state.services
-        day_a = svc._om_reserve("grilla", 6000, 8500)
-        op_a = svc._om_open_op("grilla", day_a, lambda: 8500)
+        day_a = svc._om_reserve("grilla", 60, 85)
+        op_a = svc._om_open_op("grilla", day_a, lambda: 85)
         fase[0] = datetime(2027, 4, 4, 0, 10, tzinfo=CHILE_TZ)
 
         async def despachar_a():
@@ -1004,21 +1011,21 @@ def test_el_despacho_tras_medianoche_queda_cubierto_y_contado_una_vez(make_clien
                 await weather._get(
                     http,
                     weather.FORECAST_URL,
-                    {"latitude": ",".join(["-35.4"] * 6000), "longitude": ",".join(["-71.6"] * 6000)},
+                    {"latitude": ",".join(["-35.4"] * 60), "longitude": ",".join(["-71.6"] * 60)},
                 )
             finally:
                 await http.aclose()
-            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 6000, 0)
+            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 60, 0)
 
         asyncio.run(despachar_a())
         weather.end_op(op_a)  # higiene: el cierre dentro de asyncio.run no tocó el contexto externo
         # lo servido de A quedó contado una sola vez en D+1 y le sigue perteneciendo.
-        assert svc._om_reserve("ajena", 2500, 8500) == "2027-04-04"
-        assert svc._om_reserve("ajena", 1, 8500) is None, "el tope del día nuevo se respeta"
+        assert svc._om_reserve("ajena", 25, 85) == "2027-04-04"
+        assert svc._om_reserve("ajena", 1, 85) is None, "el tope del día nuevo se respeta"
         filas = svc.db.query("SELECT day, SUM(used) AS total FROM om_day WHERE day >= '2027-04-03' GROUP BY day")
         usos = {f["day"]: f["total"] for f in filas}
     assert usos["2027-04-03"] == 0, "la reserva de D se libera entera"
-    assert usos["2027-04-04"] == 8500, "6.000 de A + 2.500 de B: ni una ubicación de más"
+    assert usos["2027-04-04"] == 85, "60 de A + 25 de B: ni una ubicación de más"
 
 
 def test_un_corte_en_el_dia_nuevo_no_le_imputa_a_la_reserva_del_dia_viejo(make_client, monkeypatch):
@@ -1227,7 +1234,7 @@ def test_la_escritura_callada_marca_sucio_al_vencer_la_ventana(make_client, monk
 
     class Respaldo:
         def mark_dirty(self):
-            avisos.append(1)
+            avisos.append(len(avisos) + 1)
 
         async def stop(self):
             pass
@@ -1261,7 +1268,7 @@ def test_el_cierre_respalda_el_ledger_callado_por_la_ventana(make_client, monkey
 
     class Respaldo:
         def mark_dirty(self):
-            avisos.append(1)
+            avisos.append(len(avisos) + 1)
 
         async def stop(self):
             pass
@@ -1284,10 +1291,10 @@ def test_el_cierre_respalda_el_ledger_callado_por_la_ventana(make_client, monkey
 def test_la_respuesta_que_cruza_la_medianoche_se_cobra_al_dia_del_despacho(make_client, monkeypatch):
     """Re-revisión G3: una petición despachada en D y respondida en D+1 se cobra a D.
 
-    La carrera exacta: A reserva 6.000 en D y despacha; la respuesta queda retenida; cae la
-    medianoche de Chile; B reserva 6.000 de D+1; la respuesta de A se libera y A liquida.
-    Antes, `by_day` usaba el día de la respuesta y D+1 quedaba en 12.000 contra un tope de
-    8.500. Ahora lo servido se imputa al día del DESPACHO —el día que `in_flight` anotó al
+    La carrera exacta: A reserva 60 en D y despacha; la respuesta queda retenida; cae la
+    medianoche de Chile; B reserva 60 de D+1; la respuesta de A se libera y A liquida.
+    Antes, `by_day` usaba el día de la respuesta y D+1 quedaba en 120 contra un tope de
+    85. Ahora lo servido se imputa al día del DESPACHO —el día que `in_flight` anotó al
     enviar y cuya reserva cubrió la petición—: D queda con lo de A y D+1 solo con lo de B.
     """
     fase = [datetime(2027, 4, 3, 23, 55, tzinfo=CHILE_TZ)]
@@ -1307,9 +1314,9 @@ def test_la_respuesta_que_cruza_la_medianoche_se_cobra_al_dia_del_despacho(make_
 
     with make_client() as client:
         svc = client.app.state.services
-        day_a = svc._om_reserve("grilla", 6000, 8500)
+        day_a = svc._om_reserve("grilla", 60, 85)
         assert day_a == "2027-04-03"
-        op_a = svc._om_open_op("grilla", day_a, lambda: 8500)
+        op_a = svc._om_open_op("grilla", day_a, lambda: 85)
 
         async def main():
             transporte = Retencion()
@@ -1319,35 +1326,36 @@ def test_la_respuesta_que_cruza_la_medianoche_se_cobra_al_dia_del_despacho(make_
                     weather._get(
                         http,
                         weather.FORECAST_URL,
-                        {"latitude": ",".join(["-35.4"] * 6000), "longitude": ",".join(["-71.6"] * 6000)},
+                        {"latitude": ",".join(["-35.4"] * 60), "longitude": ",".join(["-71.6"] * 60)},
                     )
                 )
-                await transporte.llego.wait()  # A despachó en D; su reserva de D lo cubre
+                # con tope: si `_get` falla antes de despachar, la prueba no cuelga
+                await asyncio.wait_for(transporte.llego.wait(), 5)  # A despachó en D; su reserva de D lo cubre
                 fase[0] = datetime(2027, 4, 4, 0, 10, tzinfo=CHILE_TZ)  # la medianoche cayó (y el DST)
-                # B se lleva 6.000 del día nuevo antes de que la respuesta de A llegue.
-                assert svc._om_reserve("ajena", 6000, 8500) == "2027-04-04"
+                # B se lleva 60 del día nuevo antes de que la respuesta de A llegue.
+                assert svc._om_reserve("ajena", 60, 85) == "2027-04-04"
                 transporte.liberar.set()
                 await tarea  # la respuesta de A llega ya en D+1
             finally:
                 await http.aclose()
-            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 6000, 0)
+            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 60, 0)
 
         asyncio.run(main())
         weather.end_op(op_a)  # higiene: el cierre dentro de asyncio.run no tocó el contexto externo
         filas = svc.db.query("SELECT day, SUM(used) AS total FROM om_day WHERE day >= '2027-04-03' GROUP BY day")
         usos = {f["day"]: f["total"] for f in filas}
-        # la respuesta de A no infló el día nuevo: B tomó 6.000 y todavía entra lo que
-        # falta del tope; si lo servido de A hubiera caído en D+1, ni 2.500 cabrían.
-        assert svc._om_reserve("sonda", 2500, 8500) == "2027-04-04"
-        assert svc._om_reserve("sonda", 1, 8500) is None, "el tope del día nuevo se respeta"
-    assert usos["2027-04-03"] == 6000, "lo servido por A se cobra a D, el día que lo cubrió"
-    assert usos["2027-04-04"] == 6000, "D+1 queda solo con lo de B: no recibe gasto sin reserva"
+        # la respuesta de A no infló el día nuevo: B tomó 60 y todavía entra lo que
+        # falta del tope; si lo servido de A hubiera caído en D+1, ni 25 cabrían.
+        assert svc._om_reserve("sonda", 25, 85) == "2027-04-04"
+        assert svc._om_reserve("sonda", 1, 85) is None, "el tope del día nuevo se respeta"
+    assert usos["2027-04-03"] == 60, "lo servido por A se cobra a D, el día que lo cubrió"
+    assert usos["2027-04-04"] == 60, "D+1 queda solo con lo de B: no recibe gasto sin reserva"
 
 
 def test_la_cobertura_del_dia_nuevo_se_devuelve_cuando_todo_falla(make_client, monkeypatch):
     """Re-revisión S5, fallo total: lo cubierto en el día nuevo se reembolsa como la reserva.
 
-    A reserva 6.000 en D; cae la medianoche; su despacho en D+1 queda cubierto con 6.000
+    A reserva 60 en D; cae la medianoche; su despacho en D+1 queda cubierto con 60
     (la cobertura de G1) y el proveedor responde 503. La cobertura se devuelve entera y la
     reserva de D también: sin ese reembolso, cada reintento fallido fugaba su cobertura y
     podía bloquear las tareas del día nuevo. El reembolso además no hunde la fila por
@@ -1361,8 +1369,8 @@ def test_la_cobertura_del_dia_nuevo_se_devuelve_cuando_todo_falla(make_client, m
 
     with make_client() as client:
         svc = client.app.state.services
-        day_a = svc._om_reserve("grilla", 6000, 8500)
-        op_a = svc._om_open_op("grilla", day_a, lambda: 8500)
+        day_a = svc._om_reserve("grilla", 60, 85)
+        op_a = svc._om_open_op("grilla", day_a, lambda: 85)
         fase[0] = datetime(2027, 4, 4, 0, 10, tzinfo=CHILE_TZ)
         svc._om_record("grilla", 4)  # otra pasada ya sirvió 4 ubicaciones en D+1
 
@@ -1373,11 +1381,11 @@ def test_la_cobertura_del_dia_nuevo_se_devuelve_cuando_todo_falla(make_client, m
                     await weather._get(
                         http,
                         weather.FORECAST_URL,
-                        {"latitude": ",".join(["-35.4"] * 6000), "longitude": ",".join(["-71.6"] * 6000)},
+                        {"latitude": ",".join(["-35.4"] * 60), "longitude": ",".join(["-71.6"] * 60)},
                     )
             finally:
                 await http.aclose()
-            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 6000, 0)
+            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 60, 0)
 
         asyncio.run(despachar_a())
         weather.end_op(op_a)  # higiene: el cierre dentro de asyncio.run no tocó el contexto externo
@@ -1392,8 +1400,8 @@ def test_la_cobertura_del_dia_nuevo_se_devuelve_cuando_todo_falla(make_client, m
 def test_la_cobertura_del_dia_nuevo_se_ajusta_a_lo_servido(make_client, monkeypatch):
     """Re-revisión S5, fallo parcial: la cobertura no usada se reembolsa tras medianoche.
 
-    A despacha ya en D+1 dos peticiones cubiertas (5.000 + 1.000); la primera la sirve
-    Open-Meteo y la segunda responde 503. D+1 queda en 5.000 —lo servido— y no en 6.000:
+    A despacha ya en D+1 dos peticiones cubiertas (50 + 10); la primera la sirve
+    Open-Meteo y la segunda responde 503. D+1 queda en 50 —lo servido— y no en 60:
     la cobertura del fallo se devuelve con el mismo delta con signo que la reserva de D,
     que también se libera entera (nada de A despachó en D).
     """
@@ -1410,29 +1418,29 @@ def test_la_cobertura_del_dia_nuevo_se_ajusta_a_lo_servido(make_client, monkeypa
 
     with make_client() as client:
         svc = client.app.state.services
-        day_a = svc._om_reserve("grilla", 6000, 8500)
-        op_a = svc._om_open_op("grilla", day_a, lambda: 8500)
+        day_a = svc._om_reserve("grilla", 60, 85)
+        op_a = svc._om_open_op("grilla", day_a, lambda: 85)
         fase[0] = datetime(2027, 4, 4, 0, 10, tzinfo=CHILE_TZ)
 
         async def despachar_a():
             http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
             try:
-                await weather._get(http, weather.FORECAST_URL, _params(5000))  # la sirve
+                await weather._get(http, weather.FORECAST_URL, _params(50))  # la sirve
                 with pytest.raises(weather.WeatherError):
-                    await weather._get(http, weather.FORECAST_URL, _params(1000))  # 503
+                    await weather._get(http, weather.FORECAST_URL, _params(10))  # 503
             finally:
                 await http.aclose()
-            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 6000, 0)
+            svc._om_settle_op("grilla", weather.end_op(op_a), day_a, 60, 0)
 
         asyncio.run(despachar_a())
         weather.end_op(op_a)  # higiene: el cierre dentro de asyncio.run no tocó el contexto externo
         filas = svc.db.query("SELECT day, SUM(used) AS total FROM om_day WHERE day >= '2027-04-03' GROUP BY day")
         usos = {f["day"]: f["total"] for f in filas}
-        # D+1 quedó en 5.000: lo no servido no ocupa cupo y B puede llevarse lo que falta.
-        assert svc._om_reserve("ajena", 3500, 8500) == "2027-04-04"
-        assert svc._om_reserve("ajena", 1, 8500) is None, "lo no servido no ocupa cupo"
+        # D+1 quedó en 50: lo no servido no ocupa cupo y B puede llevarse lo que falta.
+        assert svc._om_reserve("ajena", 35, 85) == "2027-04-04"
+        assert svc._om_reserve("ajena", 1, 85) is None, "lo no servido no ocupa cupo"
     assert usos["2027-04-03"] == 0, "la reserva de D se libera: nada despachó allí"
-    assert usos["2027-04-04"] == 5000, "solo lo servido: la cobertura del 503 se devolvió"
+    assert usos["2027-04-04"] == 50, "solo lo servido: la cobertura del 503 se devolvió"
 
 
 # --- re-revisión (cuarta ronda): una cancelación con la petición ya despachada liquida
