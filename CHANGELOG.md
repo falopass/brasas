@@ -4,6 +4,9 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 
 ## [Unreleased]
 
+**Mi zona reutiliza sus datos secundarios (REND-02, tercera tanda)**
+- Al volver a «Mi zona», el historial, la temporada, la lluvia, la estación, el aire y las alertas oficiales de cada lugar se reutilizan mientras siguen vigentes según su fuente (alertas oficiales 5 min como máximo), en vez de pedirse otra vez. El estado de cada lugar se sigue consultando siempre.
+
 **Configuración del cliente (REND-02, segunda tanda)**
 - La primera pantalla y la navegación ya no esperan a la configuración del servidor. Las acciones que necesitan claves públicas esperan de forma acotada y muestran un error recuperable si no llegan; los formularios y las vistas reciben la configuración tardía sin borrar su estado. La medición comparada con configuración normal y retrasada sigue pendiente de CI.
 

@@ -891,14 +891,14 @@ function applySummary(place, result, ahora = Date.now()) {
  * render nuevo gane sobre un refresco viejo. */
 async function refreshSummaries(container) {
   const places = store.get('places') || [];
-  if (!places.length) { keepPlace(container, () => paint(container)); return; }
+  if (!places.length) { repinta(container); return; }
   const mine = turno;
   lastSummaryAt = new Date().toISOString();
   const results = await Promise.all(places.map((p) => api.placeSummary(p.id).catch(() => ({ error: true }))));
   if (!mounted || mine !== turno) return;
   const ahora = Date.now();
   places.forEach((p, i) => applySummary(p, results[i], ahora));
-  keepPlace(container, () => paint(container));
+  repinta(container);
   loadIncidentes(); // los anillos de MZ-08 siguen el mismo turno de refresco
 }
 
@@ -906,7 +906,7 @@ function maybeRefresh(container, motivo) {
   // Aunque no toque volver a pedir resúmenes, repintamos: el héroe y el aviso de datos
   // atrasados cambian con lo que ya está en el store (focos, última ingesta).
   if (!debeRefrescar({ ultimo: lastSummaryAt, ahora: Date.now(), visible: document.visibilityState === 'visible', motivo })) {
-    keepPlace(container, () => paint(container));
+    repinta(container);
     return;
   }
   refreshSummaries(container);
@@ -923,7 +923,57 @@ async function retrySummary(container, place, btn) {
   lastSummaryAt = new Date().toISOString();
   applySummary(place, summary);
   if (summary.error) toast('Sigue sin poder consultar este lugar.', 'error');
-  keepPlace(container, () => paint(container));
+  repinta(container);
+}
+
+/* REND-02 t3: los seis secundarios de cada lugar se reutilizan entre renders con una
+ * vigencia por fuente, siempre ≤ la cadencia real del dato en el backend: historial
+ * 10 min (los incidentes cambian en cada ciclo de 10 min), lluvia 10 min (el backend
+ * sirve la celda 30 min), estación 10 min (red EMA de la DMC, ~10 min), aire 30 min
+ * (SINCA cachea 30 min), panorama 3 h (agregados de temporada, GEPRIF) y oficiales
+ * 5 min: la mitad del ciclo de ingesta de SENAPRED, lo más fresco que puede llegar. */
+const secGeo = (ruta) => (p) => request(`${ruta}?lat=${p.lat}&lon=${p.lon}`);
+export const SECUNDARIOS = [ // [vigencia ms, Map visible, cómo pedir]
+  [10 * 60000, histories, (p) => api.placeHistory(p.id)],
+  [3 * 3600000, panoramas, (p) => (p.comuna ? api.panorama(p.comuna.code) : null)],
+  [10 * 60000, lluvias, secGeo('/api/climate/lluvia')],
+  [10 * 60000, stations, secGeo('/api/climate/station')],
+  [30 * 60000, aires, secGeo('/api/climate/air')],
+  [5 * 60000, oficiales, secGeo('/api/alerts/official')],
+];
+const secRegistro = new Map(); // clave → { at, val } vigente o { prom } en vuelo
+
+/* Repintado sin perder la posición, reutilizado por toda la vista. */
+const repinta = (container) => keepPlace(container, () => paint(container));
+
+/* Clave de reutilización (REND-02 t3): id del lugar + coordenadas —editar el lugar
+   invalida—; el panorama (índice 1) se comparte por comuna. */
+const claveSec = (i, p) => (i === 1 ? `1|${p.comuna?.code ?? 'x'}` : `${i}|${p.id}|${p.lat}|${p.lon}`);
+
+/* Pide el secundario `i` del lugar `p` (fila de SECUNDARIOS: [vigencia, Map visible,
+   pedir]) reutilizando el vigente o el vuelo en curso de su clave: dos renders seguidos
+   no duplican pedidos y la respuesta de uno alimenta al otro. Un fallo (null) no se
+   guarda —el próximo render reintenta— y el valor visible anterior se conserva.
+   Resuelve el dato si cambió lo visible del lugar o null si ya lo tenía. */
+export function pedirSecundario(registro, i, p, fila) {
+  const [ttl, mapa, pedir] = fila;
+  const guardar = (v) => mapa.set(p.id, v);
+  const clave = claveSec(i, p);
+  const hit = registro.get(clave);
+  if (hit?.prom) return hit.prom.then((v) => { if (v != null) guardar(v); return v; });
+  if (hit?.val != null && Date.now() - hit.at < ttl) {
+    // Un lugar nuevo puede compartir la clave (panorama por comuna): recibe el valor vigente.
+    const falta = mapa.get(p.id) !== hit.val;
+    guardar(hit.val);
+    return Promise.resolve(falta ? hit.val : null);
+  }
+  const prom = Promise.resolve().then(() => pedir(p)).catch(() => null).then((v) => {
+    if (v != null) { registro.set(clave, { at: Date.now(), val: v }); guardar(v); }
+    else registro.delete(clave);
+    return v;
+  });
+  registro.set(clave, { prom });
+  return prom;
 }
 
 /* MZ-07 + PERF-10: la vista se pinta por etapas. Primero resúmenes + me + avisos → héroe,
@@ -944,10 +994,12 @@ async function render(container) {
   lastSummaryAt = new Date().toISOString();
   const ahora = Date.now();
   const ids = new Set(places.map((p) => p.id));
+  const claves = new Set(places.flatMap((p) => SECUNDARIOS.map((_, i) => claveSec(i, p))));
   for (const id of [...summaries.keys()]) if (!ids.has(id)) { summaries.delete(id); summariesAt.delete(id); }
-  for (const m of [histories, panoramas, lluvias, stations, aires, oficiales]) {
+  for (const [, m] of SECUNDARIOS) {
     for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
   }
+  secRegistro.forEach((_, clave) => claves.has(clave) || secRegistro.delete(clave));
   places.forEach((p, i) => applySummary(p, sums[i], ahora));
   paint(container);
   if (!places.length) return;
@@ -960,7 +1012,7 @@ async function render(container) {
     const correr = () => {
       paintPendiente = false;
       if (mine !== turno || !mounted) return;
-      keepPlace(container, () => paint(container));
+      repinta(container);
     };
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(correr);
     else setTimeout(correr, 0);
@@ -979,28 +1031,12 @@ async function render(container) {
     }
     if (cambio) agendarPaint();
   });
-  // Los seis datos secundarios por lugar (con panorama deduplicado por comuna dentro del
-  // ciclo) actualizan en cuanto llegan, agrupando repintados en un solo cuadro.
-  const panoramaPorComuna = new Map();
-  const pedirPanorama = (code) => {
-    if (!panoramaPorComuna.has(code)) panoramaPorComuna.set(code, api.panorama(code).catch(() => null));
-    return panoramaPorComuna.get(code);
-  };
-  const tareas = places.flatMap((p) => [
-    [api.placeHistory(p.id).catch(() => null), (v) => histories.set(p.id, v)],
-    [p.comuna ? pedirPanorama(p.comuna.code) : Promise.resolve(null), (v) => panoramas.set(p.id, v)],
-    [request(`/api/climate/lluvia?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => lluvias.set(p.id, v)],
-    [request(`/api/climate/station?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => stations.set(p.id, v)],
-    [request(`/api/climate/air?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => aires.set(p.id, v)],
-    [request(`/api/alerts/official?lat=${p.lat}&lon=${p.lon}`).catch(() => null), (v) => oficiales.set(p.id, v)],
-  ]);
-  tareas.forEach(([prom, guardar]) => {
-    prom.then((v) => {
-      if (mine !== turno || !mounted || v == null) return;
-      guardar(v);
-      agendarPaint();
-    });
-  });
+  // Los seis secundarios por lugar reutilizan lo vigente entre renders (REND-02 t3): la
+  // clave lleva id y coordenadas (editar invalida), el panorama se comparte por comuna y
+  // el vuelo en curso alimenta al render nuevo. Pintan en cuanto llegan, coalescidos.
+  places.forEach((p) => SECUNDARIOS.forEach((fila, i) => {
+    pedirSecundario(secRegistro, i, p, fila).then((v) => v != null && agendarPaint());
+  }));
 }
 
 /* PERF-14: el título es fijo y se pinta al montar; los datos repintan solo las zonas a sus
@@ -1265,7 +1301,7 @@ export default {
     offPlaces = store.on('places', async () => { if (mounted) { syncTitulo(container); await render(container); frame(); } });
     // PERF-13: antes de que lleguen los lugares estos repintados pintarían el estado
     // vacío; el primer render real lo dispara el evento 'places' del arranque.
-    offStatus = store.on('status', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
+    offStatus = store.on('status', () => { if (mounted && store.get('placesReady')) repinta(container); });
     // MZ-06: el resumen se vuelve a pedir con cada lote nuevo de focos (data.js deduplica:
     // 'observations' solo cambia con un corte nuevo) y al volver a la app.
     offObs = store.on('observations', () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'focos'); });
@@ -1274,7 +1310,7 @@ export default {
     // REND-02: la nota de FIRMS del pie depende de la configuración, que puede llegar
     // después del primer pintado; el repintado es el mismo que ya usan los demás datos.
     offConfig?.();
-    offConfig = store.on('config', () => { if (mounted && store.get('placesReady')) keepPlace(container, () => paint(container)); });
+    offConfig = store.on('config', () => { if (mounted && store.get('placesReady')) repinta(container); });
     onVis = () => { if (mounted && store.get('placesReady')) maybeRefresh(container, 'volver'); };
     onResize = () => ajustarHojaPortada(container);
     document.addEventListener('visibilitychange', onVis);
