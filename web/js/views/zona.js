@@ -935,7 +935,7 @@ async function retrySummary(container, place, btn) {
 const secGeo = (ruta) => (p) => request(`${ruta}?lat=${p.lat}&lon=${p.lon}`);
 export const SECUNDARIOS = [ // [vigencia ms, Map visible, cómo pedir]
   [10 * 60000, histories, (p) => api.placeHistory(p.id)],
-  [3 * 3600000, panoramas, (p) => (p.comuna ? api.panorama(p.comuna.code) : null)],
+  [3 * 3600000, panoramas, (p) => (p.comuna ? api.panorama(p.comuna.code) : NO_APLICA)],
   [10 * 60000, lluvias, secGeo('/api/climate/lluvia')],
   [10 * 60000, stations, secGeo('/api/climate/station')],
   [30 * 60000, aires, secGeo('/api/climate/air')],
@@ -946,34 +946,45 @@ const secRegistro = new Map(); // clave → { at, val } vigente o { prom } en vu
 /* Repintado sin perder la posición, reutilizado por toda la vista. */
 const repinta = (container) => keepPlace(container, () => paint(container));
 
-/* Clave de reutilización (REND-02 t3): id del lugar + coordenadas —editar el lugar
-   invalida—; el panorama (índice 1) se comparte por comuna. */
-const claveSec = (i, p) => (i === 1 ? `1|${p.comuna?.code ?? 'x'}` : `${i}|${p.id}|${p.lat}|${p.lon}`);
+/* Clave de reutilización (REND-02 t3): id del lugar + coordenadas + radio —editar el
+   lugar invalida—; el panorama (índice 1) se comparte por comuna. */
+const claveSec = (i, p) => (i === 1 ? `1|${p.comuna?.code ?? 'x'}` : `${i}|${p.id}|${p.lat}|${p.lon}|${p.radius_km}`);
+const NO_APLICA = {}; // panorama de un lugar sin comuna: no hay dato que mostrar
+
+/* Ata lo visible del lugar a su clave: si cambió (lugar editado), lo anterior deja de
+   mostrarse en el acto. Devuelve [ranura, clave] para la purga del registro. */
+function vincular(registro, i, p, mapa) {
+  const slot = `@${i}|${p.id}`;
+  const clave = claveSec(i, p);
+  if (registro.get(slot) !== clave) { mapa.delete(p.id); registro.set(slot, clave); }
+  return [slot, clave];
+}
 
 /* Pide el secundario `i` del lugar `p` (fila de SECUNDARIOS: [vigencia, Map visible,
    pedir]) reutilizando el vigente o el vuelo en curso de su clave: dos renders seguidos
-   no duplican pedidos y la respuesta de uno alimenta al otro. Un fallo (null) no se
-   guarda —el próximo render reintenta— y el valor visible anterior se conserva.
-   Resuelve el dato si cambió lo visible del lugar o null si ya lo tenía. */
+   no duplican pedidos. Una respuesta de una clave reemplazada se descarta. Un fallo no
+   queda vigente y retira lo visible: un dato vencido no se muestra como actual.
+   Resuelve un valor no nulo si cambió lo visible del lugar (hay que repintar). */
 export function pedirSecundario(registro, i, p, fila) {
   const [ttl, mapa, pedir] = fila;
-  const guardar = (v) => mapa.set(p.id, v);
-  const clave = claveSec(i, p);
+  const [slot, clave] = vincular(registro, i, p, mapa);
+  const aplicar = (v) => {
+    if (registro.get(slot) !== clave) return null;
+    if (v == null || v === NO_APLICA) return mapa.delete(p.id) ? NO_APLICA : null;
+    if (mapa.get(p.id) === v) return null;
+    mapa.set(p.id, v);
+    return v;
+  };
   const hit = registro.get(clave);
-  if (hit?.prom) return hit.prom.then((v) => { if (v != null) guardar(v); return v; });
-  if (hit?.val != null && Date.now() - hit.at < ttl) {
-    // Un lugar nuevo puede compartir la clave (panorama por comuna): recibe el valor vigente.
-    const falta = mapa.get(p.id) !== hit.val;
-    guardar(hit.val);
-    return Promise.resolve(falta ? hit.val : null);
-  }
+  if (hit?.prom) return hit.prom.then(aplicar);
+  if (hit && Date.now() - hit.at < ttl) return Promise.resolve(aplicar(hit.val));
   const prom = Promise.resolve().then(() => pedir(p)).catch(() => null).then((v) => {
-    if (v != null) { registro.set(clave, { at: Date.now(), val: v }); guardar(v); }
+    if (v != null) registro.set(clave, { at: Date.now(), val: v });
     else registro.delete(clave);
     return v;
   });
   registro.set(clave, { prom });
-  return prom;
+  return prom.then(aplicar);
 }
 
 /* MZ-07 + PERF-10: la vista se pinta por etapas. Primero resúmenes + me + avisos → héroe,
@@ -994,7 +1005,8 @@ async function render(container) {
   lastSummaryAt = new Date().toISOString();
   const ahora = Date.now();
   const ids = new Set(places.map((p) => p.id));
-  const claves = new Set(places.flatMap((p) => SECUNDARIOS.map((_, i) => claveSec(i, p))));
+  // Antes del primer pintado: lo visible de un lugar editado se retira enseguida.
+  const claves = new Set(places.flatMap((p) => SECUNDARIOS.flatMap(([, m], i) => vincular(secRegistro, i, p, m))));
   for (const id of [...summaries.keys()]) if (!ids.has(id)) { summaries.delete(id); summariesAt.delete(id); }
   for (const [, m] of SECUNDARIOS) {
     for (const id of [...m.keys()]) if (!ids.has(id)) m.delete(id);
