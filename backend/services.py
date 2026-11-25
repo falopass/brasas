@@ -1100,7 +1100,10 @@ class Services:
         de una escritura nueva) y al cerrar el proceso, porque `Persistence.stop` solo
         sube si algo dejó sucio.
         """
-        if self.persistence is None:
+        # El mismo gancho que marca las escrituras de `db.execute` (el ledger escribe con su
+        # propia conexión): así se respeta quien lo haya reemplazado, como antes hacía kv_set.
+        aviso = self.db.on_user_write
+        if aviso is None:
             return
         ahora = time.monotonic()
         with self._om_lock:
@@ -1109,7 +1112,7 @@ class Services:
                 return
             self._om_ledger_dirty_at = ahora
             self._om_ledger_pending = False
-        self.persistence.mark_dirty()
+        aviso()
 
     def _om_ledger_flush_pending(self) -> None:
         """Emite la marca pendiente del ledger cuando la ventana del throttle ya venció.
@@ -1119,14 +1122,15 @@ class Services:
         respaldo y el día podía pasarse de 9.000 tras restaurar. Lo llama cada ciclo (el
         `tick_and_backup` que fuerza el respaldo) y no depende de que llegue otro gasto.
         """
-        if self.persistence is None:
+        aviso = self.db.on_user_write
+        if aviso is None:
             return
         with self._om_lock:
             if not self._om_ledger_pending or time.monotonic() - self._om_ledger_dirty_at < OM_LEDGER_DIRTY_WINDOW_S:
                 return
             self._om_ledger_dirty_at = time.monotonic()
             self._om_ledger_pending = False
-        self.persistence.mark_dirty()
+        aviso()
 
     def _om_ledger_close(self) -> None:
         """Al cerrar el proceso, la marca callada se emite ya: el respaldo final lleva el ledger.
@@ -1137,8 +1141,9 @@ class Services:
         with self._om_lock:
             pendiente = self._om_ledger_pending
             self._om_ledger_pending = False
-        if pendiente:
-            self.persistence.mark_dirty()
+        aviso = self.db.on_user_write
+        if pendiente and aviso is not None:
+            aviso()
 
     def _om_record(
         self, task: str, locations: int | dict[str, int], day: dict[str, Any] | None = None

@@ -906,7 +906,7 @@ def test_el_ledger_avisa_al_respaldo_a_lo_sumo_una_vez_por_ventana(make_client, 
     monkeypatch.setattr(services, "time", reloj)
     with make_client() as client:
         svc = client.app.state.services
-        monkeypatch.setattr(svc, "persistence", Respaldo())
+        monkeypatch.setattr(svc.db, "on_user_write", Respaldo().mark_dirty)
         svc._om_ledger_dirty()
         svc._om_ledger_dirty()
         assert avisos == [1], "dentro de la ventana no vuelve a avisar"
@@ -1242,7 +1242,7 @@ def test_la_escritura_callada_marca_sucio_al_vencer_la_ventana(make_client, monk
     monkeypatch.setattr(services, "time", reloj)
     with make_client() as client:
         svc = client.app.state.services
-        monkeypatch.setattr(svc, "persistence", Respaldo())
+        monkeypatch.setattr(svc.db, "on_user_write", Respaldo().mark_dirty)
         svc._om_ledger_dirty()  # arranca la ventana: avisos [1]
         svc._om_ledger_dirty()  # escritura suprimida: queda pendiente
         assert avisos == [1]
@@ -1276,7 +1276,7 @@ def test_el_cierre_respalda_el_ledger_callado_por_la_ventana(make_client, monkey
     monkeypatch.setattr(services, "time", reloj)
     with make_client() as client:
         svc = client.app.state.services
-        monkeypatch.setattr(svc, "persistence", Respaldo())
+        monkeypatch.setattr(svc.db, "on_user_write", Respaldo().mark_dirty)
         svc._om_ledger_dirty()  # avisos [1]: arranca la ventana
         svc._om_record("risk", 5)  # gasto real del ledger, callado por la ventana
         assert avisos == [1]
