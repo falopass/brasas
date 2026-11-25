@@ -156,6 +156,11 @@ def test_status_and_risk_reads_stay_fixed_and_bounded(make_client, db_reads):
     correr `dev.py check`, y un tope sin holgura bloquea la cola completa cuando una ruta
     suma una lectura legítima. La garantía fuerte es la invariancia con el volumen; si hay
     que apretar, se aprieta la ruta, no el test.
+
+    La primera ficha de riesgo pide aire y atmósfera (reserva y liquidación del cupo de
+    Open-Meteo); sin red, la atmósfera queda con su caché negativa y las siguientes ya no la
+    piden. Por eso la llamada fría se mide contra el techo y la invariancia con el volumen
+    se compara entre llamadas con la misma caché.
     """
     techos = {"/api/status": 22, "/api/risk/5109": 18}
     with make_client() as client:
@@ -163,6 +168,8 @@ def test_status_and_risk_reads_stay_fixed_and_bounded(make_client, db_reads):
         seed_detections(db, 0, 100)
         small = {}
         for path, techo in techos.items():
+            fria = read_count(db_reads, client, path)
+            assert fria <= techo, reads_diagnosis(db_reads, path, techo)
             small[path] = read_count(db_reads, client, path)
             assert small[path] <= techo, reads_diagnosis(db_reads, path, techo)
         seed_detections(db, 100, 4900)

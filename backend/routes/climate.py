@@ -15,6 +15,7 @@ import json
 import logging
 import os
 from datetime import date, datetime, timedelta, timezone
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -25,7 +26,7 @@ from backend import scars as scars_mod
 from backend.geo import territory
 from backend.providers import dmc_stations, elevation, noaa, sinca, weather
 from backend.routes.common import services
-from backend.services import Services, stamp
+from backend.services import OPEN_METEO_RESERVE, Services, stamp
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger(__name__)
@@ -132,6 +133,62 @@ def lluvia_cache_key(lat: float, lon: float) -> str:
     return f"lluvia:{round(lat, 1)}:{round(lon, 1)}"
 
 
+LLUVIA_SENAL_COST = 1  # la celda de 0,1°: una ubicación de pronóstico horario
+LLUVIA_DEM_COST = 9    # la grilla 3×3 del DEM (pendiente a 90 m o relieve a 1000 m)
+
+
+def _tope_opcional(svc: Services) -> int:
+    """Tope de las sondas opcionales: el plan de riesgo, FWI y lluvia manda antes (REND-02)."""
+    return weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - svc._om_plan_pending()
+
+
+async def _senal_con_cupo(svc: Services, lat: float, lon: float, tope: int) -> dict:
+    """La señal de la celda con su ubicación reservada antes de la red (REND-02 t4).
+
+    La caché de la celda sirve sin reservar (misma lectura que `senal_celda`). Sin cupo
+    la ruta degrada igual que cuando el proveedor falla —`senal` en null— sin gastar ni
+    cachear el hueco. Solo un resultado servido descuenta; un fallo (429 o red caída)
+    devuelve la reserva y una operación cortada tras despachar conserva lo que salió.
+    """
+    cached = svc.db.cache_get(lluvia_cache_key(lat, lon))
+    if isinstance(cached, dict) and "senal" in cached:
+        return {"senal": cached.get("senal"), "computed_at": cached.get("computed_at") or stamp()}
+    day = svc._om_reserve("lluvia", LLUVIA_SENAL_COST, tope)
+    if not day:
+        return {"senal": None, "computed_at": stamp()}
+    op = svc._om_open_op("lluvia", day, lambda: tope)
+    senal = None
+    computed_at = stamp()
+    try:
+        dato = await senal_celda(svc, lat, lon)
+        senal, computed_at = dato.get("senal"), dato.get("computed_at") or stamp()
+    finally:
+        svc._om_settle_op("lluvia", weather.end_op(op), day, LLUVIA_SENAL_COST, 1 if senal is not None else 0)
+    return {"senal": senal, "computed_at": computed_at}
+
+
+async def _dem_con_cupo(svc: Services, lat: float, lon: float, tope: int, fetch) -> Any | None:
+    """Pide el DEM (grilla 3×3 = 9 ubicaciones) con el cupo reservado antes de la red.
+
+    Devuelve None sin pedir si el cupo opcional no alcanza o si el proveedor falla: la
+    ruta de lluvia degrada igual que siempre. Solo un resultado efectivo descuenta
+    (REND-02 t4); el fallo devuelve la reserva y la operación cortada tras despachar
+    conserva lo que salió a la red.
+    """
+    day = svc._om_reserve("lluvia", LLUVIA_DEM_COST, tope)
+    if not day:
+        return None
+    op = svc._om_open_op("lluvia", day, lambda: tope)
+    resultado = None
+    try:
+        resultado = await fetch()
+    except Exception as exc:
+        log.warning("Relieve del punto no disponible en la lluvia del punto: %s", exc)
+    finally:
+        svc._om_settle_op("lluvia", weather.end_op(op), day, LLUVIA_DEM_COST, LLUVIA_DEM_COST if resultado is not None else 0)
+    return resultado
+
+
 async def senal_celda(svc: Services, lat: float, lon: float) -> dict:
     """La señal de lluvia del punto, leída o calculada por su celda de 0,1°.
 
@@ -168,40 +225,48 @@ async def senal_celda(svc: Services, lat: float, lon: float) -> dict:
     return {"senal": senal, "computed_at": computed_at}
 
 
-async def _slope_deg(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float) -> float | None:
+async def _slope_deg(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float, tope: int) -> float | None:
     """Pendiente en grados, solo si hay lluvia, cicatriz o el relieve ya está en caché.
 
     `slope_aspect` devuelve None si Open-Meteo falla. Cualquier otro error se trata
-    igual: la señal de lluvia no puede caerse porque falte el DEM.
+    igual: la señal de lluvia no puede caerse porque falte el DEM. REND-02 t4: la grilla
+    3×3 (9 ubicaciones) se reserva antes de pedir; sin cupo tampoco se pide y el cruce
+    declara el hueco, no lo inventa.
     """
     hay_lluvia = bool(senal and (senal.get("mm_3h") or 0) > 0)
-    if not (hay_lluvia or scar_ha > 0 or svc.db.cache_get(elevation.cache_key(lat, lon))):
+    cacheada = svc.db.cache_get(elevation.cache_key(lat, lon))
+    if not (hay_lluvia or scar_ha > 0 or cacheada):
         return None
-    try:
-        slope_info = await elevation.slope_aspect(svc.db, svc.client, lat, lon)
-    except Exception as exc:
-        log.warning("Pendiente no disponible en la lluvia del punto: %s", exc)
-        return None
-    if not slope_info:
-        return None
-    return float(slope_info[0])
+    if cacheada is not None:
+        try:
+            slope_info = await elevation.slope_aspect(svc.db, svc.client, lat, lon)
+        except Exception as exc:
+            log.warning("Pendiente no disponible en la lluvia del punto: %s", exc)
+            return None
+        return float(slope_info[0]) if slope_info else None
+    slope_info = await _dem_con_cupo(svc, lat, lon, tope, lambda: elevation.slope_aspect(svc.db, svc.client, lat, lon))
+    return float(slope_info[0]) if slope_info else None
 
 
-async def _relieve(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float) -> dict | None:
+async def _relieve(svc: Services, lat: float, lon: float, senal: dict | None, scar_ha: float, tope: int) -> dict | None:
     """{"slope_max_deg", "elev_max_m"} a escala de ladera, con la misma guarda de cupo.
 
     Solo se pide el DEM si hay lluvia prevista, cicatriz a ≤ 5 km o el relieve ya está
-    en caché: cada punto nuevo descuenta el cupo de Open-Meteo. Un fallo deja el relieve
-    en null — el cruce de aluvión lo declara, no lo inventa.
+    en caché: cada punto nuevo descuenta el cupo de Open-Meteo. REND-02 t4: la grilla se
+    reserva antes de pedir; sin cupo devuelve None. Un fallo deja el relieve en null —
+    el cruce de aluvión lo declara, no lo inventa.
     """
     hay_lluvia = bool(senal and (senal.get("mm_3h") or 0) > 0)
-    if not (hay_lluvia or scar_ha > 0 or svc.db.cache_get(elevation.relieve_cache_key(lat, lon))):
+    cacheado = svc.db.cache_get(elevation.relieve_cache_key(lat, lon))
+    if not (hay_lluvia or scar_ha > 0 or cacheado):
         return None
-    try:
-        return await elevation.relieve(svc.db, svc.client, lat, lon)
-    except Exception as exc:
-        log.warning("Relieve de ladera no disponible en la lluvia del punto: %s", exc)
-        return None
+    if cacheado is not None:
+        try:
+            return await elevation.relieve(svc.db, svc.client, lat, lon)
+        except Exception as exc:
+            log.warning("Relieve de ladera no disponible en la lluvia del punto: %s", exc)
+            return None
+    return await _dem_con_cupo(svc, lat, lon, tope, lambda: elevation.relieve(svc.db, svc.client, lat, lon))
 
 
 @router.get("/climate/lluvia")
@@ -222,13 +287,21 @@ async def lluvia_punto(
     AGUA-04): `aviso` es el criterio calibrado que también dispara el aviso a los lugares
     guardados. La celda solo guarda la señal: dos lugares de la misma celda no comparten
     pendiente ni cicatriz.
+
+    REND-02 t4: cada pieza que toca Open-Meteo reserva antes de la red —la señal de la
+    celda (1 ubicación) y, si el criterio las pide, la pendiente y el relieve del punto
+    (grillas 3×3 de 9)— contra el tope de las tareas opcionales. Sin cupo la ruta
+    degrada igual que cuando el proveedor falla (señal y terreno en null), la caché de
+    la celda sirve sin reservar y solo lo servido descuenta; el gasto ajeno intercalado
+    nunca queda atribuido aquí (contabilidad local por operación).
     """
-    dato = await senal_celda(svc, lat, lon)
+    tope = _tope_opcional(svc)
+    dato = await _senal_con_cupo(svc, lat, lon, tope)
     senal, computed_at = dato["senal"], dato["computed_at"]
     cicatriz = scars_mod.cicatriz_cerca(svc.db, lat, lon, lluvia_mod.CICATRIZ_DIAS)
     scar_ha = cicatriz["ha"]
-    slope_deg = await _slope_deg(svc, lat, lon, senal, scar_ha)
-    relieve = await _relieve(svc, lat, lon, senal, scar_ha)
+    slope_deg = await _slope_deg(svc, lat, lon, senal, scar_ha, tope)
+    relieve = await _relieve(svc, lat, lon, senal, scar_ha, tope)
     return {
         "senal": senal,
         "computed_at": computed_at,

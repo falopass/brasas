@@ -1,8 +1,8 @@
 """Persistencia local en SQLite, en dos archivos.
 
 - brasa.db ("main"): datos de las personas que no se pueden reconstruir —dispositivos, lugares,
-  alertas, reportes y claves (VAPID, Telegram)—. Es pequeña y es la que se respalda (por ejemplo,
-  en R2 al desplegar en Cloudflare).
+  alertas, reportes y claves (VAPID, Telegram)—, más el ledger operativo de cuota de Open-Meteo.
+  Es pequeña y es la que se respalda (por ejemplo, en R2 al desplegar en Cloudflare).
 - work.db ("work", adjunta): observaciones, procedencia de ingestas, riesgo y caché. Se reconstruye
   sola con la ingesta, así que no se respalda.
 
@@ -311,6 +311,7 @@ CREATE TABLE IF NOT EXISTS work.conaf_cicatrices (
   temporada TEXT,
   fetched_at TEXT NOT NULL
 );
+
 """
 
 USER_SCHEMA = """
@@ -392,6 +393,17 @@ CREATE INDEX IF NOT EXISTS reports_status ON reports(status, created_at DESC);
 CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+-- Ledger de cuota (REND-02): va junto al espejo `kv`, para que reservas y publicación
+-- sean atómicas incluso ante una caída con WAL habilitado.
+CREATE TABLE IF NOT EXISTS om_day (
+  day TEXT NOT NULL,             -- día local de Chile (America/Santiago), AAAA-MM-DD
+  task TEXT NOT NULL,            -- tarea que gastó las ubicaciones (risk, fwi, rain, viento…)
+  used INTEGER NOT NULL DEFAULT 0,
+  last INTEGER,                  -- gasto de la última pasada; NULL si solo quedó la reserva
+  at TEXT,
+  PRIMARY KEY (day, task)
 );
 
 -- Moderadores voluntarios (SEC-10): cada uno con su token; en la base solo vive el SHA-256.
@@ -488,6 +500,31 @@ def _migrate_user(conn: sqlite3.Connection) -> None:
         "share_token TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(place_id))")
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS main.places_share ON places(share_token)")
     conn.execute("CREATE INDEX IF NOT EXISTS main.reports_author ON reports(subscriber_id, created_at DESC)")
+    _migrate_om_day(conn)
+
+
+def _migrate_om_day(conn: sqlite3.Connection) -> None:
+    """Trae el ledger previo desde work.db y conserva el mayor valor de cada día y tarea."""
+    exists = conn.execute(
+        "SELECT 1 FROM work.sqlite_master WHERE type = 'table' AND name = 'om_day'"
+    ).fetchone()
+    if not exists:
+        return
+    columns = {row[1] for row in conn.execute("PRAGMA work.table_info(om_day)")}
+    if not {"day", "task", "used"} <= columns:
+        return
+    last = "last" if "last" in columns else "NULL"
+    at = "at" if "at" in columns else "NULL"
+    rows = conn.execute(f"SELECT day, task, used, {last} AS last, {at} AS at FROM work.om_day").fetchall()
+    for row in rows:
+        conn.execute(
+            "INSERT INTO main.om_day(day, task, used, last, at) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(day, task) DO UPDATE SET "
+            "used = MAX(used, excluded.used), "
+            "last = CASE WHEN excluded.used > used THEN excluded.last ELSE last END, "
+            "at = CASE WHEN excluded.used > used THEN excluded.at ELSE at END",
+            (row["day"], row["task"], row["used"], row["last"], row["at"]),
+        )
 
 
 # Columnas agregadas al esquema de trabajo después de la primera versión: (tabla, columna, definición).
@@ -672,6 +709,7 @@ class Database:
         with self.connect() as conn:
             conn.executescript(WORK_SCHEMA)
             _migrate_work(conn)
+            _migrate_om_day(conn)
 
     def restore(self, content: bytes) -> None:
         """Reemplaza brasa.db con un respaldo, tras verificar que es una base SQLite íntegra."""

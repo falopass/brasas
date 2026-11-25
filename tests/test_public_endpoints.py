@@ -36,9 +36,13 @@ def _host(host: str):
 # /api/weather ----------------------------------------------------------------
 
 
-def test_weather_devuelve_contrato_cuando_el_proveedor_responde(make_client, web):
+def test_weather_devuelve_contrato_cuando_el_proveedor_responde(make_client, web, monkeypatch):
     web.add(_host(OPEN_METEO_HOST), lambda r: json_response({"current": CURRENT, "current_units": CURRENT_UNITS}))
     with make_client() as app:
+        # REND-02 S1: la sonda admite contra `9.000 − 500 − plan`; con el plan real de una
+        # fecha apretada el tope opcional puede quedar en casi cero. Aquí se prueba el
+        # contrato con el proveedor, no el apretón del plan: plan pendiente 0.
+        monkeypatch.setattr(app.app.state.services, "_om_plan_pending", lambda _day=None: 0)
         r = app.get("/api/weather", params={"lat": -35.42, "lon": -71.60})
     assert r.status_code == 200
     body = r.json()
@@ -48,9 +52,10 @@ def test_weather_devuelve_contrato_cuando_el_proveedor_responde(make_client, web
     assert body["data"] == CURRENT and body["units"] == CURRENT_UNITS
 
 
-def test_weather_502_cuando_el_proveedor_falla(make_client, web):
+def test_weather_502_cuando_el_proveedor_falla(make_client, web, monkeypatch):
     web.add(_host(OPEN_METEO_HOST), lambda r: httpx.Response(503))
     with make_client() as app:
+        monkeypatch.setattr(app.app.state.services, "_om_plan_pending", lambda _day=None: 0)
         r = app.get("/api/weather", params={"lat": -35.42, "lon": -71.60})
     assert r.status_code == 502
     assert r.json()["detail"]
@@ -62,9 +67,10 @@ def test_weather_rechaza_coordenadas_fuera_de_rango(make_client):
         assert app.get("/api/weather", params={"lat": 0, "lon": -181}).status_code == 422
 
 
-def test_weather_segunda_llamada_identica_sale_de_la_cache(make_client, web):
+def test_weather_segunda_llamada_identica_sale_de_la_cache(make_client, web, monkeypatch):
     web.add(_host(OPEN_METEO_HOST), lambda r: json_response({"current": CURRENT, "current_units": CURRENT_UNITS}))
     with make_client() as app:
+        monkeypatch.setattr(app.app.state.services, "_om_plan_pending", lambda _day=None: 0)
         params = {"lat": -35.42, "lon": -71.60}
         first = app.get("/api/weather", params=params)
         second = app.get("/api/weather", params=params)

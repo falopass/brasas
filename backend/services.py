@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import threading
 import time
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
@@ -53,6 +54,14 @@ FWI_RETRY_MIN = 30  # tras un fallo, el archivo del FWI espera antes de reintent
 FWI_INCREMENTAL_DAYS = 13  # con estado previo en fwi_daily basta una ventana corta de archivo
 RISK_POINTS_PER_PASS = 550  # tope de la pasada de riesgo cuando el cupo alcanza
 OPEN_METEO_RESERVE = 500  # viento de avisos, clima de casos, calidad del aire y reintentos
+OM_DAY_KEY = "open_meteo_day"  # REND-02: copia visible del contador atómico `work.om_day`
+# REND-02 t4: el ledger (`om_day` + su espejo en `kv`) se escribe decenas de veces por ciclo
+# y cada aviso rearmaba el debounce del respaldo remoto, que sube brasa.db entera a R2.
+# Avisar a lo sumo una vez por esta ventana basta: el ciclo ya sube un respaldo al terminar
+# (`tick_and_backup` llama `flush` aunque no haya pendiente) y cualquier otra escritura de
+# la base también marca. Una caída puede perder a lo sumo la ventana de sumas del día, nunca
+# sobrestimarlas: la restauración no rebobina (`_om_no_rewind`) y la migración funde con MAX.
+OM_LEDGER_DIRTY_WINDOW_S = 300
 AIR_EVERY_H = 6  # RISK-25: CAMS global se refresca en lotes de 50 comunas cada 6 h (~7 peticiones)
 RISK_SNAPSHOT_EVERY_H = 1  # la foto es diaria; esta guarda evita consultar la base en cada tick
 RISK_SNAPSHOT_DAYS = 120  # fotos guardadas: cuatro meses alcanzan para comparar todo el verano
@@ -153,6 +162,16 @@ class Services:
         self._lock = asyncio.Lock()
         self._cycle_lock = asyncio.Lock()
         self._deliver_lock = asyncio.Lock()
+        # REND-02 t4: serializa migración de línea base y espejo del kv; reentrante porque
+        # registrar/reservar/liquidar llaman a `_om_refresh` con el candado ya tomado.
+        self._om_lock = threading.RLock()
+        # REND-02 t4: cuándo avisó el ledger por última vez (throttle del respaldo, ver
+        # `OM_LEDGER_DIRTY_WINDOW_S`); `-inf` hace que el primer gasto del proceso avise.
+        self._om_ledger_dirty_at = float("-inf")
+        # Re-revisión S4: quedó escritura del ledger callada por la ventana del throttle;
+        # la ventana vencida debe avisar sin depender de una escritura nueva (lo comprueba
+        # el tick) y el cierre del proceso emite la marca para el respaldo final.
+        self._om_ledger_pending = False
         self._backfilled = False
         self._tick_task: asyncio.Task | None = None
         self.last_cycle: dict[str, Any] | None = None
@@ -167,6 +186,10 @@ class Services:
         # OPS-818: desglose del arranque por fases; lo arma `lifespan` al terminar de esperarlas.
         self.startup: dict[str, Any] | None = None
         self._sync_territory_centers()
+        # REND-02: el proveedor registra el gasto de sus llamadas de consumidor único —el
+        # viento de los avisos (`wind_at` y /api/weather) y el reanálisis de los casos—.
+        self._om_meter_ref = self._om_meter
+        weather.set_day_meter(self.client, self._om_meter_ref)
 
     def _sync_territory_centers(self) -> dict[str, int]:
         """Si los centros comunales cambiaron (p. ej. al pasar a cabeceras urbanas), invalida
@@ -223,10 +246,15 @@ class Services:
         # restaura el respaldo y también se espera antes de atender.
         webhook = asyncio.create_task(self.register_webhook()) if self.public_url else None
         if self.persistence.enabled:
+            # REND-02 t4: el respaldo puede ser más viejo que la base local; el contador del día
+            # de Open-Meteo no puede rebobinar. Se captura de la tabla (la verdad), no del
+            # espejo del `kv`: un gasto sin reflejar antes de una caída también se conserva.
+            om_day, om_spent = self._om_today(), self._om_spent()
             try:
                 await self.persistence.restore()
             except Exception as exc:  # sin respaldo accesible se sigue, pero se registra
                 log.error("No se pudo restaurar el respaldo: %s", exc)
+            self._om_no_rewind(om_day, om_spent)
             self._sync_territory_centers()
             self.persistence.start()
         if webhook is not None:
@@ -263,18 +291,23 @@ class Services:
         for task in self.tasks:
             task.cancel()
         await asyncio.gather(*self.tasks, return_exceptions=True)
+        self._om_ledger_close()  # S4: el respaldo final lleva el ledger aunque el throttle lo callara
         await self.persistence.stop()
         await self.client.aclose()
+        weather.clear_day_meter(self.client, self._om_meter_ref)  # REND-02: no pisa otra instancia
 
     async def tick(self) -> dict[str, Any]:
         """Un ciclo completo disparado desde afuera (Cron Trigger de Cloudflare)."""
         result: dict[str, Any] = {}
         if self.persistence.enabled and not self.persistence.ready:
+            # REND-02: igual que en `start`, restaurar no rebobina el contador del día.
+            om_day, om_spent = self._om_today(), self._om_spent()
             try:
                 result["restored"] = await self.persistence.restore()
             except Exception as exc:
                 log.warning("No se pudo restaurar el respaldo: %s", exc)
                 result["restore_error"] = f"No se pudo restaurar el respaldo ({self._backup_error_text(exc)})."
+            self._om_no_rewind(om_day, om_spent)
         if not self._backfilled:
             self._backfilled = True
             try:
@@ -810,6 +843,11 @@ class Services:
         cached = self.db.cache_get(cache_key)
         if cached is not None:
             return cached or None
+        # REND-02 t4: contabilidad local de ESTA consulta — ni otra ruta ni otro gather
+        # intercalado inflan su gasto; el acierto de caché no gasta y un fallo registra cero.
+        # No reserva (la reserva diaria de 500 le protege el cupo) y no gana bloqueos nuevos.
+        op = weather.start_op()
+        wind: dict[str, Any] = {}
         try:
             data = (await weather.current(self.client, lat, lon))["data"]
             wind = {
@@ -820,6 +858,10 @@ class Services:
             }
         except weather.WeatherError:
             wind = {}
+        finally:
+            # Re-revisión S3: liquidación común — un corte o un timeout con la petición ya
+            # despachada conserva lo que salió a la red (el respaldo ya pudo servirla).
+            self._om_meter("viento", self._om_served_by_day(weather.end_op(op), self._om_today(), 0))
         self.db.cache_set(cache_key, wind, 1800 if wind else 300)
         return wind or None
 
@@ -834,37 +876,42 @@ class Services:
         grilla guardada (la prioridad es del pronóstico y el FWI). El tope efectivo
         descuenta la reserva y lo que el 30-30-30 aún necesita hoy: gastar hasta el
         límite dejaba a las pasadas de riesgo del resto del día sin cupo (#798).
+        REND-02: el cupo se reserva de forma atómica antes de pedir y lo no servido
+        (429 o red caída) se devuelve al día tras la respuesta.
         """
         puntos = windgrid_mod.grid_points()
         tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
-        if not windgrid_mod.cabe_en_cupo(len(puntos), tope, self._om_spent()):
+        day = self._om_reserve("windgrid", len(puntos), tope)
+        if not day:
             return {"skipped": "cupo", "needed": len(puntos), "left": tope - self._om_spent()}
-        before_base = weather.counts()["locations"]
+        op = self._om_open_op(
+            "windgrid", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+        )
         base_ok = False
         try:
             rows = await weather.forecast_hourly(self.client, puntos, days=2)
             base_ok = True
         finally:
-            delta_base = max(0, weather.counts()["locations"] - before_base)
-            gastado_base = delta_base if delta_base else (len(puntos) if base_ok else 0)
-            if gastado_base > 0:
-                self._om_record("windgrid", gastado_base)
+            # REND-02 t4: lo servido de ESTA pasada; el 429 o la red caída devuelven la reserva.
+            self._om_settle_op("windgrid", weather.end_op(op), day, len(puntos), len(puntos) if base_ok else 0)
         # La subgrilla fina es opcional: sin cupo o si falla, se sirve solo la de 1°,
         # pero siempre se anota cualquier lote que Open-Meteo ya haya despachado.
         fine = None
         fine_puntos = windgrid_mod.fine_grid_points()
-        if windgrid_mod.cabe_en_cupo(len(fine_puntos), tope, self._om_spent()):
-            before_fine = weather.counts()["locations"]
+        day_fine = self._om_reserve("windgrid_fine", len(fine_puntos), tope)
+        if day_fine:
+            op = self._om_open_op(
+                "windgrid_fine", day_fine, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+            )
             fine_rows = None
             try:
                 fine_rows = await weather.forecast_hourly(self.client, fine_puntos, days=2)
             except weather.WeatherError:
                 fine_rows = None
             finally:
-                delta_fine = max(0, weather.counts()["locations"] - before_fine)
-                gastado_fine = delta_fine if delta_fine else (len(fine_puntos) if fine_rows is not None else 0)
-                if gastado_fine > 0:
-                    self._om_record("windgrid_fine", gastado_fine)
+                self._om_settle_op(
+                    "windgrid_fine", weather.end_op(op), day_fine, len(fine_puntos), len(fine_puntos) if fine_rows is not None else 0
+                )
             if fine_rows is not None:
                 fine = windgrid_mod.build_fine_grid(fine_puntos, fine_rows)
         grid = windgrid_mod.build_grid(puntos, rows, fine=fine)
@@ -877,23 +924,26 @@ class Services:
 
         Cubre las comunas del país en ~7 peticiones HTTP. Si el cupo diario no alcanza (descontando
         la reserva y lo pendiente del plan de riesgo, FWI y lluvia), cede sin fallar y la ficha
-        conserva la última caché o su respaldo puntual bajo demanda.
+        conserva la última caché o su respaldo puntual bajo demanda. REND-02: el cupo se reserva
+        de forma atómica antes de pedir y lo no servido se devuelve al día tras la respuesta.
         """
         from backend.routes.public import summarize_air_series
 
         comunas = list(territory().comunas)
         tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
-        if self._om_spent() + len(comunas) > tope:
+        day = self._om_reserve("air_batch", len(comunas), tope)
+        if not day:
             return {"skipped": "cupo", "needed": len(comunas), "left": tope - self._om_spent()}
         points = [(c.center[1], c.center[0]) for c in comunas]  # (lat, lon); `center` es (lon, lat)
-        before = weather.counts()["locations"]
+        op = self._om_open_op(
+            "air_batch", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+        )
         succeeded = False
         try:
             series_list = await weather.air_quality_batch(self.client, points, days=2)
             succeeded = True
         finally:
-            delta = max(0, weather.counts()["locations"] - before)
-            self._om_record("air_batch", delta if delta else (len(points) if succeeded else 0))
+            self._om_settle_op("air_batch", weather.end_op(op), day, len(points), len(points) if succeeded else 0)
         now = utcnow()
         entries: list[tuple[str, str]] = []
         for comuna, series in zip(comunas, series_list):
@@ -908,41 +958,398 @@ class Services:
             )
         return {"comunas": len(entries) - 1}
 
+    def _om_today(self) -> str:
+        """El día local de Chile (America/Santiago, sin offset fijo): clave del contador."""
+        return datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+
     def _parse_open_meteo_day(self, raw: str | None) -> dict[str, Any]:
-        today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
+        today = self._om_today()
         data = json.loads(raw) if raw else {}
         if data.get("date") != today:
             return {"date": today, "total": 0, "tasks": {}}
         return data
 
     def open_meteo_day(self) -> dict[str, Any]:
-        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día."""
-        return self._parse_open_meteo_day(self.db.kv_get("open_meteo_day"))
+        """Ubicaciones gastadas hoy en el día de Chile, por tarea; se reinicia al cambiar el día.
+
+        REND-02 t4: la verdad es la tabla `om_day` de brasa.db (suma atómica en SQL, sobrevive a
+        la suspensión del contenedor y la restauración no la rebobina). Este método lee la tabla
+        en una sola transacción y además refleja la copia del `kv` que leen las rutas viejas;
+        el espejo nunca decide una cuota: la decisión sale siempre de la tabla, así una copia
+        atrasada no puede dejar pasar un gasto de más.
+        """
+        return self._om_refresh()
 
     def _om_spent(self) -> int:
         return int(self.open_meteo_day().get("total") or 0)
 
-    def _om_plan_pending(self, day: dict[str, Any] | None = None) -> int:
-        """Cupo pendiente de riesgo, FWI y lluvia: las tareas opcionales no pueden gastarlo."""
+    def _om_plan_pending(self, day: dict[str, Any] | None = None, skip_task: str | None = None) -> int:
+        """Cupo pendiente de riesgo, FWI y lluvia: las tareas opcionales no pueden gastarlo.
+
+        REND-02 t4: el parámetro `day` se acepta por compatibilidad de firma y se ignora: el
+        pendiente se calcula sobre la tabla, no sobre un `kv` que puede estar atrasado.
+        `skip_task` excluye del pendiente una línea del plan: la usa la propia tarea al
+        reservar (el FWI y la lluvia son parte del plan; descontarse también a sí mismas
+        las dejaría sin el cupo que el plan les tiene reservado).
+        """
         today = datetime.now(risk_mod.CHILE_TZ).date()
         comunas = len(territory().comunas)
         passes = max(1, (24 * 60 + self.settings.risk_interval_min - 1) // self.settings.risk_interval_min)
         plan = open_meteo_daily_costs(comunas, self.settings, today)
         plan["risk"] = risk_points_per_pass(comunas, self.settings, today) * passes
-        spent = (day if day is not None else self.open_meteo_day()).get("tasks") or {}
+        spent = self.open_meteo_day().get("tasks") or {}
         # ponytail: reserva diaria conservadora; limitar a horas restantes si bloquea tareas opcionales.
-        return sum(max(0, needed - int((spent.get(task) or {}).get("today") or 0)) for task, needed in plan.items())
+        return sum(
+            max(0, needed - int((spent.get(task) or {}).get("today") or 0))
+            for task, needed in plan.items()
+            if task != skip_task
+        )
 
-    def _om_record(self, task: str, locations: int, day: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        """Suma una pasada al acumulado del día. La base sobrevive a la suspensión del contenedor."""
+    # ------------------------------------------------- contabilidad atómica (REND-02)
+    def _om_refresh(self, day: str | None = None) -> dict[str, Any]:
+        """Migra la línea base del `kv` a la tabla, refleja el espejo y devuelve la vista del día.
+
+        REND-02 t4: una sola transacción —brasa.db y work.db adjunta se comprometen juntas—
+        hace las tres cosas, serializada por `_om_lock`: dos escrituras a la vez no pueden
+        perder sumas del espejo ni doble-contar la línea base.
+
+        1. Lo que el `kv` publica menos lo que ya era de la tabla (`_table`) es línea base
+           externa: siembras manuales o un `kv` heredado de antes de la tabla. Se pasa a filas
+           de `om_day` (una por tarea, el resto a la fila interna `_base`) exactamente una vez.
+        2. La vista canónica sale de la tabla en esa misma transacción: toda decisión de
+           cuota, el pendiente del plan y la captura de restauración leen esto, nunca el
+           espejo, que puede estar atrasado.
+        3. El `kv` se reescribe como espejo puro de la tabla (con la marca `_table`), solo si
+           cambió: en reposo esta lectura no escribe nada.
+        """
+        day = day or self._om_today()
+        with self._om_lock:
+            with self.db.connect() as conn:
+                row = conn.execute("SELECT value FROM kv WHERE key = ?", (OM_DAY_KEY,)).fetchone()
+                try:
+                    kv = json.loads(row["value"]) if row else {}
+                except ValueError:
+                    kv = {}
+                if not isinstance(kv, dict) or kv.get("date") != day:
+                    kv = {}
+                marca = kv.get("_table") or {}
+                extra = int(kv.get("total") or 0) - int(marca.get("total") or 0)
+                if extra > 0:
+                    rest = extra
+                    marcas_t = marca.get("tasks") or {}
+                    for task, entry in (kv.get("tasks") or {}).items():
+                        if not isinstance(task, str) or task.startswith("_") or not isinstance(entry, dict):
+                            continue
+                        claim = int(entry.get("today") or 0) - int(marcas_t.get(task) or 0)
+                        if claim > 0:
+                            conn.execute(
+                                "INSERT INTO om_day(day, task, used, last, at) VALUES (?,?,?,?,?) "
+                                "ON CONFLICT(day, task) DO UPDATE SET used = used + excluded.used, "
+                                "last = excluded.last, at = excluded.at",
+                                (day, task, claim, entry.get("last"), entry.get("at")),
+                            )
+                            rest -= claim
+                    if rest > 0:
+                        conn.execute(
+                            "INSERT INTO om_day(day, task, used, at) VALUES (?,?,?,?) "
+                            "ON CONFLICT(day, task) DO UPDATE SET used = used + excluded.used",
+                            (day, "_base", rest, stamp()),
+                        )
+                rows = conn.execute("SELECT task, used, last, at FROM om_day WHERE day = ?", (day,)).fetchall()
+                table = {r["task"]: {"used": int(r["used"] or 0), "last": r["last"], "at": r["at"]} for r in rows}
+                total = sum(entry["used"] for entry in table.values())
+                tasks = {
+                    task: {"today": entry["used"], "last": entry["last"], "at": entry["at"]}
+                    for task, entry in table.items()
+                    if not task.startswith("_") and entry["used"] > 0
+                }
+                mirror = json.dumps(
+                    {
+                        "date": day,
+                        "total": total,
+                        "tasks": tasks,
+                        "_table": {"total": total, "tasks": {task: entry["used"] for task, entry in table.items()}},
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                dirty = not row or row["value"] != mirror
+                if dirty:
+                    conn.execute(
+                        "INSERT INTO kv(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        (OM_DAY_KEY, mirror),
+                    )
+        if dirty:
+            self._om_ledger_dirty()  # el mismo aviso que hacía kv_set, con el throttle del ledger
+        return {"date": day, "total": total, "tasks": tasks}
+
+    def _om_ledger_dirty(self) -> None:
+        """Avisa al respaldo que el ledger cambió, a lo sumo una vez por `OM_LEDGER_DIRTY_WINDOW_S`.
+
+        Sin el throttle, un flujo sostenido (normales de lluvia celda a celda, pasada de
+        riesgo, fichas concurrentes) avisaba por cada registro, reserva o liquidación y el
+        debounce de 3 s del respaldo remoto se rearmaba siempre: brasa.db entera subía a R2
+        de continuo. Con la ventana el respaldo queda a lo sumo 5 min atrás del ledger y
+        no se pierde nada: el ciclo fuerza un `flush` al terminar, cualquier otra escritura
+        de la base también marca, y tras una restauración ni `_om_no_rewind` ni la fusión
+        `MAX` de la migración dejan retroceder el día (a lo sumo se subestima la ventana,
+        que es el lado conservador: se pide de menos a Open-Meteo, nunca de más).
+
+        Re-revisión S4 (borde final): la escritura callada por la ventana no se olvida —
+        queda pendiente y se avisa al vencer la ventana (lo comprueba el tick, sin depender
+        de una escritura nueva) y al cerrar el proceso, porque `Persistence.stop` solo
+        sube si algo dejó sucio.
+        """
+        # El mismo gancho que marca las escrituras de `db.execute` (el ledger escribe con su
+        # propia conexión): así se respeta quien lo haya reemplazado, como antes hacía kv_set.
+        aviso = self.db.on_user_write
+        if aviso is None:
+            return
+        ahora = time.monotonic()
+        with self._om_lock:
+            if ahora - self._om_ledger_dirty_at < OM_LEDGER_DIRTY_WINDOW_S:
+                self._om_ledger_pending = True
+                return
+            self._om_ledger_dirty_at = ahora
+            self._om_ledger_pending = False
+        aviso()
+
+    def _om_ledger_flush_pending(self) -> None:
+        """Emite la marca pendiente del ledger cuando la ventana del throttle ya venció.
+
+        Sin este borde, lo gastado dentro de los 300 s quedaba sin marca y solo avisaría una
+        escritura posterior: un contenedor reemplazado justo después perdía ese gasto en el
+        respaldo y el día podía pasarse de 9.000 tras restaurar. Lo llama cada ciclo (el
+        `tick_and_backup` que fuerza el respaldo) y no depende de que llegue otro gasto.
+        """
+        aviso = self.db.on_user_write
+        if aviso is None:
+            return
+        with self._om_lock:
+            if not self._om_ledger_pending or time.monotonic() - self._om_ledger_dirty_at < OM_LEDGER_DIRTY_WINDOW_S:
+                return
+            self._om_ledger_dirty_at = time.monotonic()
+            self._om_ledger_pending = False
+        aviso()
+
+    def _om_ledger_close(self) -> None:
+        """Al cerrar el proceso, la marca callada se emite ya: el respaldo final lleva el ledger.
+
+        `Persistence.stop` solo sube si `_dirty` quedó marcado; una escritura suprimida por
+        la ventana del throttle no debe ser la razón de que el último respaldo se quede corto.
+        """
+        with self._om_lock:
+            pendiente = self._om_ledger_pending
+            self._om_ledger_pending = False
+        aviso = self.db.on_user_write
+        if pendiente and aviso is not None:
+            aviso()
+
+    def _om_record(
+        self, task: str, locations: int | dict[str, int], day: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        """Suma atómicamente las ubicaciones servidas por tarea en el ledger (REND-02).
+
+        Antes se leía el JSON del `kv`, se sumaba en Python y se reescribía: dos tareas a la
+        vez (el ciclo y una ruta) se perdían las sumas. Ahora suma en SQL sobre `om_day` y
+        refleja la copia en el `kv` en la misma pasada serializada. El parámetro `day` se
+        conserva por compatibilidad con las rutas que lo traen precargado; la tabla es la que
+        manda. Los registros locales pueden pasar un mapa para conservar el día real de cada
+        respuesta cuando una operación cruza medianoche.
+        """
+        hoy = self._om_today()
+        por_dia = locations if isinstance(locations, dict) else ({hoy: locations} if locations > 0 else {})
+        if por_dia:
+            with self._om_lock:
+                with self.db.connect() as conn:
+                    for dia, cantidad in por_dia.items():
+                        if cantidad <= 0:
+                            continue
+                        conn.execute(
+                            "INSERT INTO om_day(day, task, used, last, at) VALUES (?,?,?,?,?) "
+                            "ON CONFLICT(day, task) DO UPDATE SET used = used + excluded.used, "
+                            "last = excluded.last, at = excluded.at",
+                            (dia, task, cantidad, cantidad, stamp()),
+                        )
+                self._om_ledger_dirty()
+                return self._om_refresh(hoy)
+        return self._om_refresh(hoy)
+
+    def _om_reserve(self, task: str, locations: int, tope: int) -> str | None:
+        """Reserva `locations` del cupo del día antes de pedirlas a Open-Meteo (REND-02).
+
+        Devuelve el día local de Chile donde quedó la reserva —el token explícito que la
+        liquidación necesita, porque una respuesta que llega pasada la medianoche se suelta
+        en el día donde se tomó— o None si no cabe y la tarea cede, igual que cedía hoy por
+        cupo. El control y la suma son una sola sentencia SQL: dos tareas que reservan a la
+        vez no se reparten el mismo cupo. La línea base externa (siembras manuales del `kv`
+        aún no migradas a la tabla) entra en el mismo chequeo con un subselect sobre el `kv`,
+        así tampoco puede atravesarse dos veces en paralelo. Lo no servido se devuelve con
+        `_om_settle`.
+        """
+        hoy = self._om_today()
         if locations <= 0:
-            return day
-        data = day if day is not None else self.open_meteo_day()
-        entry = data["tasks"].setdefault(task, {"today": 0})
-        entry.update(last=locations, at=stamp(), today=int(entry.get("today") or 0) + locations)
-        data["total"] = int(data.get("total") or 0) + locations
-        self.db.kv_set("open_meteo_day", json.dumps(data, ensure_ascii=False))
-        return data
+            return hoy
+        with self.db.connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO om_day(day, task, used) VALUES (?,?,0)", (hoy, task))
+            ok = conn.execute(
+                "UPDATE om_day SET used = used + ?, last = ?, at = ? WHERE day = ? AND task = ? "
+                "AND (SELECT COALESCE(SUM(used), 0) FROM om_day WHERE day = ?) "
+                "    + COALESCE((SELECT CASE WHEN json_valid(value) AND json_extract(value, '$.date') = ? "
+                "                             THEN MAX(0, CAST(json_extract(value, '$.total') AS INTEGER) "
+                "                                        - CAST(COALESCE(json_extract(value, '$._table.total'), 0) AS INTEGER)) "
+                "                             ELSE 0 END "
+                "                     FROM main.kv WHERE key = ?), 0) "
+                "    + ? <= ?",
+                (locations, locations, stamp(), hoy, task, hoy, hoy, OM_DAY_KEY, locations, tope),
+            ).rowcount == 1
+        if ok:
+            self._om_ledger_dirty()
+        return hoy if ok else None
+
+    def _om_settle(
+        self, task: str, day: str, reserved: int, by_day: dict[str, int], extra: dict[str, int] | None = None
+    ) -> None:
+        """Ajusta la reserva al gasto efectivo por día tras la respuesta (REND-02 t4).
+
+        La reserva se libera en el día donde se tomó (`day`, el token de `_om_reserve`); lo
+        servido se contabiliza en el día local del DESPACHO de cada petición (G3), así una
+        operación que cruza medianoche reparte su gasto sin tocar la fila de una reserva
+        nueva de la misma tarea: el ajuste del día original solo resta lo que esa reserva
+        puso. Solo lo servido descuenta; un 429 o una red caída devuelven todo lo reservado.
+
+        Re-revisión G1: lo servido en un día distinto al de la reserva se ajusta contra la
+        cobertura con la que `_get` respaldó su despacho (`extra`, reserva del día nuevo):
+        el día nuevo no recibe gasto gratis y la cobertura no usada se devuelve.
+
+        Re-revisión S5: el ajuste es el delta con signo `servido − reservado` —la cobertura
+        sobrante se reembolsa igual que la reserva del día original; el `MAX(0, …)` exterior
+        es el tope por abajo: el reembolso no hunde la fila por debajo de cero. Un fallo
+        total tras medianoche (429, red caída, JSON inválido) devuelve también lo cubierto
+        en el día nuevo; sin ese reembolso, cada reintento fallido fugaba su cobertura y
+        podía bloquear las tareas del día.
+        """
+        with self._om_lock:
+            with self.db.connect() as conn:
+                served_day = int(by_day.get(day) or 0)
+                conn.execute(
+                    "UPDATE om_day SET used = MAX(0, used + ?), last = ?, at = ? WHERE day = ? AND task = ?",
+                    (served_day - reserved, served_day, stamp(), day, task),
+                )
+                for otro in set(by_day) | set(extra or {}):
+                    if otro == day:
+                        continue
+                    n = int(by_day.get(otro) or 0)
+                    reservado = int((extra or {}).get(otro) or 0)
+                    if n <= 0 and reservado <= 0:
+                        continue
+                    delta = n - reservado  # con signo: lo cubierto y no servido se devuelve
+                    conn.execute(
+                        "INSERT INTO om_day(day, task, used, last, at) VALUES (?,?,?,?,?) "
+                        "ON CONFLICT(day, task) DO UPDATE SET used = MAX(0, used + ?), last = excluded.last, at = excluded.at",
+                        (otro, task, max(0, delta), n, stamp(), delta),
+                    )
+            self._om_refresh(day)
+
+    def _om_cover(self, op: weather.SpentOp, task: str, tope: Callable[[], int], unit: int = 1) -> Callable[[str, int], bool]:
+        """Gancho de cobertura para `_get` (re-revisión G1).
+
+        Si el día contable cambia mientras la operación vive, cada despacho pide su cobertura
+        en el día nuevo con el mismo `_om_reserve` atómico (chequeo y suma contra el tope del
+        día nuevo, recalculado por `tope`). `unit` es el costo contable por ubicación —2 en la
+        atmósfera, que pondera >1 crédito fraccional por sus 14 variables horarias—. La
+        cobertura queda en `op.extra` para que la liquidación ajuste cada día contra su
+        propia reserva y devuelva la parte no servida (S5): un fallo tras medianoche no
+        fuga lo cubierto.
+        """
+
+        def cover(dia: str, locations: int) -> bool:
+            if not self._om_reserve(task, unit * locations, tope()):
+                return False
+            op.extra[dia] = op.extra.get(dia, 0) + unit * locations
+            return True
+
+        return cover
+
+    def _om_open_op(self, task: str, day: str | None, tope: Callable[[], int], unit: int = 1) -> weather.SpentOp:
+        """Abre la contabilidad de una operación ligada a su reserva (REND-02 t4).
+
+        `day` es el token de `_om_reserve`. Con él, `_get` puede cubrir cada despacho en el
+        día contable en que ocurre (G1): si la medianoche de Chile cae en medio de la
+        operación y el día nuevo no tiene cupo, la petición no sale y la tarea degrada igual
+        que ante un «sin cupo». Sin `day` (operaciones sin reserva, como el viento de los
+        avisos) la operación queda sin gancho y no gana bloqueos nuevos.
+        """
+        op = weather.start_op()
+        op.reserve_day = day
+        op.cover = self._om_cover(op, task, tope, unit) if day else None
+        return op
+
+    def _om_settle_op(self, task: str, op: weather.SpentOp, day: str | None, reserved: int, served_if_silent: int) -> None:
+        """Liquidación común de una operación con reserva: gasto por día, cortes y cobertura.
+
+        Unifica lo que cada camino liquidaba por su cuenta (re-revisión S3): lo servido
+        medido, lo despachado sin respuesta tras un corte (se conserva en el día del
+        despacho, G2) y las reservas extra del cambio de día (G1) se ajustan en una sola
+        pasada atómica.
+        """
+        self._om_settle(task, day, reserved, self._om_served_by_day(op, day, served_if_silent), op.extra)
+
+    def _om_no_rewind(self, day: str, total: int) -> None:
+        """Tras restaurar un respaldo, el contador del día no retrocede (REND-02).
+
+        Un respaldo más viejo que la base local devolvería un contador menor y el día se
+        gastaría dos veces contra Open-Meteo. `total` se captura de la tabla (la verdad), no
+        del espejo del `kv`, que pudo quedar sin reflejar el último gasto antes de una caída;
+        si la restauración trae algo mayor (base local vacía), gana el mayor. La diferencia
+        se guarda en la fila interna `_base`, invisible en la vista pública.
+        """
+        if total <= 0:
+            return
+        with self._om_lock:
+            actual = self._om_refresh(day).get("total") or 0
+            if self._om_today() == day and actual < total:
+                with self.db.connect() as conn:
+                    conn.execute(
+                        "INSERT INTO om_day(day, task, used, at) VALUES (?,?,?,?) "
+                        "ON CONFLICT(day, task) DO UPDATE SET used = used + excluded.used",
+                        (day, "_base", total - actual, stamp()),
+                    )
+                self._om_refresh(day)
+
+    def _om_served_by_day(self, op: weather.SpentOp, day: str, served_if_silent: int) -> dict[str, int]:
+        """Gasto de una operación para liquidar: lo medido y, si la respuesta no contó, lo servido.
+
+        Las respuestas reales siempre cuentan (`_served_add`); las respuestas simuladas por
+        pruebas que falsifican proveedores sin pasar por `_count` no dejan rastro. Para el
+        tope, un éxito que no contó se toma por lo que se fue a pedir: nunca se subconta lo
+        que Open-Meteo sirvió de verdad, y el fallo (429, red caída) sigue en cero.
+
+        Re-revisión G2: una operación cortada tras despachar (timeout o cancelación) no
+        recibió respuesta, así que lo que quedó en vuelo se conserva como gasto en el día
+        local del DESPACHO (`in_flight`), no en el día de la reserva: reservar en D y
+        despachar en D+1 no le imputa a D. Lo despachado con respuesta cierta (éxito,
+        429 o error de red) ya volvió a cero en el proveedor y sigue costando lo servido.
+
+        Re-revisión G3: `by_day` y `in_flight` usan la misma atribución —el día del
+        despacho—, así que lo servido y lo cortado de la misma petición nunca caen en
+        días distintos: cada uno queda ajustado contra la reserva o cobertura que lo
+        respaldó.
+        """
+        if op.cut and op.in_flight:
+            by_day = dict(op.by_day)
+            for otro, en_vuelo in op.in_flight.items():
+                if en_vuelo > 0:
+                    by_day[otro] = by_day.get(otro, 0) + en_vuelo
+            return by_day
+        return op.by_day or ({day: served_if_silent} if served_if_silent else {})
+
+    def _om_meter(self, task: str, locations: int | dict[str, int]) -> None:
+        """Gasto que el proveedor registra por sí solo: viento de avisos y clima de casos."""
+        try:
+            self._om_record(task, locations)
+        except Exception:
+            log.exception("No se pudo registrar el gasto de Open-Meteo de %s", task)
 
     async def compute_risk(self) -> int:
         """Pronóstico horario de 7 días por comuna → 30-30-30 diario, combinado con el FWI.
@@ -978,16 +1385,23 @@ class Services:
         budget = min(risk_points_per_pass(len(comunas), self.settings), weather.DAILY_LOCATIONS_CAP - self._om_spent() - OPEN_METEO_RESERVE)
         if budget < len(comunas):
             raise RuntimeError("Sin cupo diario de Open-Meteo para el 30-30-30.")
+        # REND-02: la pasada reserva su cupo de forma atómica antes de pedir; si otra tarea
+        # se lo llevó en la ventana, el fallo es el mismo «sin cupo» de siempre.
+        day = self._om_reserve("risk", budget, weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE)
+        if not day:
+            raise RuntimeError("Sin cupo diario de Open-Meteo para el 30-30-30.")
         offset = int(self.db.kv_get("risk_point_offset") or 0)
         per_comuna, next_offset = risk_mod.budgeted_points(per_comuna, budget, offset)
         if next_offset != offset:
             self.db.kv_set("risk_point_offset", str(next_offset))
         points = [point for pts in per_comuna for point in pts]
-        before = weather.counts()["locations"]
+        op = self._om_open_op("risk", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE)
+        fetched = False
         try:
             hourly = await weather.forecast_hourly(self.client, points)
+            fetched = True
         finally:
-            self._om_record("risk", max(0, weather.counts()["locations"] - before))
+            self._om_settle_op("risk", weather.end_op(op), day, budget, len(points) if fetched else 0)
         now = stamp()
         today = datetime.now(risk_mod.CHILE_TZ).date().isoformat()
         await asyncio.to_thread(self._save_risk, comunas, per_comuna, hourly, now, today)
@@ -1112,14 +1526,32 @@ class Services:
             stored = 0
             for archive_from, group in jobs:
                 points = [(c.center[1], c.center[0]) for c in group]
-                before = weather.counts()["locations"]
+                # REND-02 t4: la tanda reserva su costo real antes de la red —un tramo de
+                # archivo por mes más el pronóstico, medido con la ventana que va a pedir—
+                # contra el cupo que deja el resto del plan (su propia línea queda fuera).
+                # Si otra tarea se llevó el cupo en la ventana, el fallo es el de siempre:
+                # marca de reintento y la misma tanda retoma en 30 min, sin gastar nada.
+                costo = weather.fwi_locations(len(points), archive_from=archive_from)
+                day = self._om_reserve(
+                    "fwi", costo, weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending(skip_task="fwi")
+                )
+                if not day:
+                    raise RuntimeError("Sin cupo diario de Open-Meteo para la tanda del FWI.")
+                op = self._om_open_op(
+                    "fwi", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending(skip_task="fwi")
+                )
+                pairs = None
                 try:
                     if archive_from is None:
                         pairs = await weather.fwi_inputs(self.client, points)
                     else:
                         pairs = await weather.fwi_inputs(self.client, points, archive_from=archive_from)
                 finally:
-                    self._om_record("fwi", max(0, weather.counts()["locations"] - before))
+                    # REND-02 t4: solo lo servido de esta tanda descuenta; un 429 del
+                    # archivo no gasta el día (queda solo en el diagnóstico de `counts`).
+                    # Re-revisión S3: liquidación común — un corte tras despachar
+                    # (apagado o despliegue) conserva lo que salió a la red.
+                    self._om_settle_op("fwi", weather.end_op(op), day, costo, 0)
                 stored += await asyncio.to_thread(self._save_fwi, group, pairs, today, stamp(), seeds)
             now = stamp()
         except Exception as exc:
@@ -1326,7 +1758,9 @@ class Services:
         corta por volumen.
 
         Cada celda se guarda apenas termina: si el proceso se corta, la siguiente corrida continúa
-        donde quedó.
+        donde quedó. REND-02 t4: cada celda reserva su ubicación (el costo real de 30 años de
+        archivo es una por celda) antes de pedir; sin cupo el resto espera a la próxima vuelta,
+        igual que cuando se agota el presupuesto de tiempo, y solo lo servido descuenta.
         """
         comunas = territory().comunas
         self._sync_territory_centers()
@@ -1345,14 +1779,26 @@ class Services:
         now = stamp()
         stored = 0
         deadline = time.monotonic() + RAIN_NORMALS_BUDGET_S
+        tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending(skip_task="rain")
         for index, (key, group) in enumerate(pending):
             if index and time.monotonic() >= deadline:
                 log.info("Normales de lluvia: presupuesto del ciclo agotado; siguen %d celdas", len(pending) - index)
                 break
             if index:
                 await asyncio.sleep(RAIN_PAUSE_S)
+            day = self._om_reserve("rain", 1, tope)
+            if not day:
+                log.info("Normales de lluvia: el cupo del día no alcanza para otra celda; siguen %d", len(pending) - index)
+                break
             point = [(key[0] * RAIN_CELL_DEG, key[1] * RAIN_CELL_DEG)]
-            series = await weather.daily_rain(client=self.client, points=point, start_date="1991-06-01", end_date="2020-10-31")
+            op = self._om_open_op(
+                "rain", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending(skip_task="rain")
+            )
+            try:
+                series = await weather.daily_rain(client=self.client, points=point, start_date="1991-06-01", end_date="2020-10-31")
+            finally:
+                # Re-revisión S3: liquidación común — un corte tras despachar conserva lo en vuelo.
+                self._om_settle_op("rain", weather.end_op(op), day, 1, 0)
             normal = rain_mod.build_normal(series[0]) if series else {}
             if not normal:
                 continue
@@ -1398,7 +1844,8 @@ class Services:
         # /api/status como los proveedores, no solo como bandera del último ciclo.
         run_id = self.start_run("Open-Meteo", "LLUVIA", weather.ARCHIVE_URL)
         self._seed_rain_normals()
-        before = weather.counts()["locations"]
+        # REND-02: el gasto lo registra cada tarea por sí sola (`build_rain_normals` y
+        # `compute_rain_anomaly`); un envoltorio que sumara el ciclo completo contaría dos veces.
         built = 0
         note = ""
         try:
@@ -1415,8 +1862,6 @@ class Services:
         except Exception as exc:
             self.finish_run(run_id, False, message=str(exc))
             raise
-        finally:
-            self._om_record("rain", max(0, weather.counts()["locations"] - before))
         self.finish_run(run_id, True, built + comunas, built, note)
         return {"rain_normals": built, "rain_comunas": comunas}
 
@@ -1436,8 +1881,25 @@ class Services:
         if end < start:
             return 0
         points = [(c.center[1], c.center[0]) for c in comunas]
-        archive = await weather.daily_rain(self.client, points, start_date=start.isoformat(), end_date=end.isoformat())
-        recent = await weather.daily_rain(self.client, points, past_days=7)
+        # REND-02 t4: la anomalía (~2 ubicaciones por comuna, una por llamada) reserva su
+        # costo real antes de la red, contra el cupo que deja el resto del plan. Sin cupo
+        # cede igual que cuando el archivo falla: la marca diaria ya quedó y la pasada
+        # espera; solo lo servido descuenta (by_day conserva los cruces de medianoche).
+        costo = 2 * len(comunas)
+        day = self._om_reserve(
+            "rain", costo, weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending(skip_task="rain")
+        )
+        if not day:
+            raise RuntimeError("Sin cupo diario de Open-Meteo para la anomalía de lluvia.")
+        op = self._om_open_op(
+            "rain", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending(skip_task="rain")
+        )
+        try:
+            archive = await weather.daily_rain(self.client, points, start_date=start.isoformat(), end_date=end.isoformat())
+            recent = await weather.daily_rain(self.client, points, past_days=7)
+        finally:
+            # Re-revisión S3: liquidación común — un corte tras despachar conserva lo en vuelo.
+            self._om_settle_op("rain", weather.end_op(op), day, costo, 0)
         now = stamp()
         rows = []
         for comuna, past, last in zip(comunas, archive, recent):
@@ -1853,27 +2315,49 @@ class Services:
         # La pasada gasta cupo de Open-Meteo —una ubicación por celda de pronóstico nueva
         # y nueve por relieve nuevo— y lo anota en el día como el resto de las tareas:
         # sin ese registro el 30-30-30 calculaba un saldo que la pasada ya había gastado.
-        # Cada lookup cede cuando el costo no cabe sin comerse la reserva ni el plan del
-        # día (misma guarda que la grilla de viento); lo ya cacheado es gratis y sigue
-        # cruzando aunque el cupo esté comprometido.
-        before = weather.counts()["locations"]
-
-        def _cupo(costo: int) -> bool:
-            gastado = self._om_spent() + max(0, weather.counts()["locations"] - before)
-            return gastado + costo + OPEN_METEO_RESERVE + self._om_plan_pending() <= weather.DAILY_LOCATIONS_CAP
+        # REND-02: cada lookup reserva su costo de forma atómica antes de pedir (la misma
+        # guarda que la grilla de viento, pero sin la carrera del chequeo y la suma); lo
+        # ya cacheado es gratis y sigue cruzando aunque el cupo esté comprometido. Si la
+        # respuesta falla o trae 429, lo reservado vuelve al día.
+        tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
 
         async def senal_lookup(lat: float, lon: float) -> dict[str, Any] | None:
             # Misma condición que `senal_celda` para leer la caché: si la entrada no trae
             # señal, la consulta se haría igual y también descuenta el cupo.
             cached = self.db.cache_get(lluvia_cache_key(lat, lon))
-            if not (isinstance(cached, dict) and "senal" in cached) and not _cupo(1):
+            if isinstance(cached, dict) and "senal" in cached:
+                return (await senal_celda(self, lat, lon)).get("senal")
+            day = self._om_reserve("aluvion", 1, tope)
+            if not day:
                 return None
-            return (await senal_celda(self, lat, lon)).get("senal")
+            op = self._om_open_op(
+                "aluvion", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+            )
+            senal = None
+            try:
+                senal = (await senal_celda(self, lat, lon)).get("senal")
+            finally:
+                # REND-02 t4: solo un resultado servido gasta. `senal_celda` devuelve null
+                # cuando el proveedor falló (429 o red caída): ese hueco cuesta cero.
+                self._om_settle_op("aluvion", weather.end_op(op), day, 1, 1 if senal is not None else 0)
+            return senal
 
         async def relieve_lookup(lat: float, lon: float) -> dict[str, Any] | None:
-            if not self.db.cache_get(elevation.relieve_cache_key(lat, lon)) and not _cupo(9):
+            if self.db.cache_get(elevation.relieve_cache_key(lat, lon)):
+                return await elevation.relieve(self.db, self.client, lat, lon)
+            day = self._om_reserve("aluvion", 9, tope)
+            if not day:
                 return None
-            return await elevation.relieve(self.db, self.client, lat, lon)
+            op = self._om_open_op(
+                "aluvion", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+            )
+            relieve = None
+            try:
+                relieve = await elevation.relieve(self.db, self.client, lat, lon)
+            finally:
+                # Mismo criterio que la señal: None es el fallo del proveedor y cuesta cero.
+                self._om_settle_op("aluvion", weather.end_op(op), day, 9, 9 if relieve is not None else 0)
+            return relieve
 
         # Las cicatrices de CONAF de la temporada anterior son la mitad del criterio y su
         # carga vivía solo en la pasada diaria (después de las 8:00 de Chile): tras un
@@ -1883,10 +2367,7 @@ class Services:
             await self.refresh_conaf_cicatrices()
         except Exception:
             log.exception("No se pudieron traer las cicatrices de CONAF")
-        try:
-            created = await alerts_mod.evaluate_aluvion(self.db, senal_lookup, relieve_lookup, now)
-        finally:
-            self._om_record("aluvion", max(0, weather.counts()["locations"] - before))
+        created = await alerts_mod.evaluate_aluvion(self.db, senal_lookup, relieve_lookup, now)
         await self.deliver(created)
         self.db.kv_set("aluvion_at", stamp())
         return len(created)
@@ -2086,7 +2567,8 @@ class Services:
             # permanente de relieve (`spread.estimate` nunca llama a la red), así que se
             # calienta aquí para cada incidente tocado. Cada punto nuevo cuesta 9 ubicaciones
             # de Open-Meteo: sin cupo del día se salta y el escenario queda en terreno plano.
-            # Un fallo del proveedor no puede interrumpir el ciclo.
+            # REND-02: el punto se reserva de forma atómica antes de pedir; un fallo del
+            # proveedor devuelve la reserva y no puede interrumpir el ciclo.
             for inc in touched:
                 if inc.get("fixed_source"):
                     continue  # fuente de calor fija probable: no genera aviso ni escenario
@@ -2094,15 +2576,22 @@ class Services:
                     continue
                 if self.db.cache_get(elevation.cache_key(inc["lat"], inc["lon"])) is not None:
                     continue  # ya consultado: la lectura de la caché no gasta cupo
-                if self._om_spent() + 9 + OPEN_METEO_RESERVE + self._om_plan_pending() > weather.DAILY_LOCATIONS_CAP:
+                tope = weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+                day = self._om_reserve("pendiente", 9, tope)
+                if not day:
                     break  # el cupo del día no da para otro punto de la grilla 3×3
-                before = weather.counts()["locations"]
+                op = self._om_open_op(
+                    "pendiente", day, lambda: weather.DAILY_LOCATIONS_CAP - OPEN_METEO_RESERVE - self._om_plan_pending()
+                )
+                pendiente = None
                 try:
-                    await elevation.slope_aspect(self.db, self.client, inc["lat"], inc["lon"])
+                    pendiente = await elevation.slope_aspect(self.db, self.client, inc["lat"], inc["lon"])
                 except Exception:
                     log.exception("No se pudo consultar el relieve del incidente %s", inc.get("id"))
                 finally:
-                    self._om_record("pendiente", max(0, weather.counts()["locations"] - before))
+                    # REND-02 t4: None es el fallo del proveedor (429 o red caída; el
+                    # escenario queda en terreno plano): la reserva se devuelve entera.
+                    self._om_settle_op("pendiente", weather.end_op(op), day, 9, 9 if pendiente is not None else 0)
             created = await alerts_mod.evaluate(self.db, fresh, self.wind_at)
             # ALR-44: los incidentes ya están re-agrupados — el calor nuevo del seguido avisa aquí.
             created += await alerts_mod.evaluate_follows(self.db)
@@ -2241,6 +2730,9 @@ class Services:
                 log.exception("Ciclo falló")
                 result = {"error": type(exc).__name__}
             if self.persistence.enabled:
+                # S4: la ventana del throttle vencida con escrituras calladas avisa aquí,
+                # sin depender de que llegue otro gasto del ledger.
+                self._om_ledger_flush_pending()
                 try:
                     reason = await self.persistence.flush()
                     result["backup"] = reason is None

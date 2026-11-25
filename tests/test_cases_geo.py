@@ -179,6 +179,10 @@ def test_weather_happy_path_and_cache(make_client, monkeypatch):
 
     monkeypatch.setattr(weather, "archive_hourly", fake_archive)
     with make_client() as client:
+        # REND-02 S1: el reanálisis admite contra `9.000 − 500 − plan`; con el plan real de
+        # una fecha apretada el tope opcional puede quedar en casi cero. Aquí se prueba la
+        # caché del caso, no el apretón del plan: plan pendiente 0.
+        monkeypatch.setattr(client.app.state.services, "_om_plan_pending", lambda _day=None: 0)
         r = client.get("/api/cases/vina-del-mar-2024/weather")
         assert r.status_code == 200
         payload = r.json()
@@ -198,6 +202,7 @@ def test_weather_upstream_error_returns_502(make_client, monkeypatch):
 
     monkeypatch.setattr(weather, "archive_hourly", broken)
     with make_client() as client:
+        monkeypatch.setattr(client.app.state.services, "_om_plan_pending", lambda _day=None: 0)
         r = client.get("/api/cases/vina-del-mar-2024/weather")
         assert r.status_code == 502
         assert r.json()["detail"]
