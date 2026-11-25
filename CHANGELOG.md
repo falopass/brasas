@@ -5,6 +5,7 @@ Formato: lo que nota una persona primero; lo técnico, después. Fechas de despl
 ## [Unreleased]
 
 **Instrumentación técnica (REND-02, primera tanda)**
+- El CI comprueba siempre el contraste de las etiquetas de la pantalla pública, aunque la demostración del día no muestre todos los estados; su texto conserva el contraste mínimo también en tamaños pequeños.
 - El harness de CI aísla la IP sintética de cada muestra de navegador y mantiene los límites del backend activos; el benchmark API usa el mismo contrato de muestras en padre e hijo.
 - La revisión visual distingue los documentos nuevos de las transiciones SPA: ya no atribuye el LCP del documento anterior a una ruta por hash. El encargo de rendimiento integral sigue abierto; no se publican ahorros antes de medirlos en CI.
 
