@@ -926,12 +926,8 @@ async function retrySummary(container, place, btn) {
   repinta(container);
 }
 
-/* REND-02 t3: los seis secundarios de cada lugar se reutilizan entre renders con una
- * vigencia por fuente, siempre ≤ la cadencia real del dato en el backend: historial
- * 10 min (los incidentes cambian en cada ciclo de 10 min), lluvia 10 min (el backend
- * sirve la celda 30 min), estación 10 min (red EMA de la DMC, ~10 min), aire 30 min
- * (SINCA cachea 30 min), panorama 3 h (agregados de temporada, GEPRIF) y oficiales
- * 5 min: la mitad del ciclo de ingesta de SENAPRED, lo más fresco que puede llegar. */
+/* REND-02 t3: caché por fuente; historial/lluvia/estación 10 min, panorama 3 h,
+ * aire 30 min y oficiales 5 min. */
 const secGeo = (ruta) => (p) => request(`${ruta}?lat=${p.lat}&lon=${p.lon}`);
 export const SECUNDARIOS = [ // [vigencia ms, Map visible, cómo pedir]
   [10 * 60000, histories, (p) => api.placeHistory(p.id)],
@@ -941,18 +937,15 @@ export const SECUNDARIOS = [ // [vigencia ms, Map visible, cómo pedir]
   [30 * 60000, aires, secGeo('/api/climate/air')],
   [5 * 60000, oficiales, secGeo('/api/alerts/official')],
 ];
-const secRegistro = new Map(); // clave → { at, val } vigente o { prom } en vuelo
+const secRegistro = new Map(); // clave → vigente o promesa en vuelo
 
-/* Repintado sin perder la posición, reutilizado por toda la vista. */
 const repinta = (container) => keepPlace(container, () => paint(container));
 
-/* Clave de reutilización (REND-02 t3): id del lugar + coordenadas + radio —editar el
-   lugar invalida—; el panorama (índice 1) se comparte por comuna. */
+/* Cambiar lugar invalida; panorama se comparte por comuna. */
 const claveSec = (i, p) => (i === 1 ? `1|${p.comuna?.code ?? 'x'}` : `${i}|${p.id}|${p.lat}|${p.lon}|${p.radius_km}`);
-const NO_APLICA = {}; // panorama de un lugar sin comuna: no hay dato que mostrar
+const NO_APLICA = {}; // panorama sin comuna
 
-/* Ata lo visible del lugar a su clave: si cambió (lugar editado), lo anterior deja de
-   mostrarse en el acto. Devuelve [ranura, clave] para la purga del registro. */
+/* Retira de inmediato lo visible si cambió la clave del lugar. */
 function vincular(registro, i, p, mapa) {
   const slot = `@${i}|${p.id}`;
   const clave = claveSec(i, p);
@@ -960,21 +953,13 @@ function vincular(registro, i, p, mapa) {
   return [slot, clave];
 }
 
-/* Pide el secundario `i` del lugar `p` (fila de SECUNDARIOS: [vigencia, Map visible,
-   pedir]) reutilizando el vigente o el vuelo en curso de su clave: dos renders seguidos
-   no duplican pedidos. Una respuesta de una clave reemplazada se descarta. Un fallo no
-   queda vigente y retira lo visible: un dato vencido no se muestra como actual.
-   Resuelve un valor no nulo si cambió lo visible del lugar (hay que repintar). */
+/* Reutiliza vigentes y vuelos; descarta respuestas de claves reemplazadas. */
 export function pedirSecundario(registro, i, p, fila) {
   const [ttl, mapa, pedir] = fila;
   const [slot, clave] = vincular(registro, i, p, mapa);
-  const aplicar = (v) => {
-    if (registro.get(slot) !== clave) return null;
-    if (v == null || v === NO_APLICA) return mapa.delete(p.id) ? NO_APLICA : null;
-    if (mapa.get(p.id) === v) return null;
-    mapa.set(p.id, v);
-    return v;
-  };
+  const aplicar = (v) => registro.get(slot) !== clave ? null
+    : v == null || v === NO_APLICA ? (mapa.delete(p.id) ? NO_APLICA : null)
+      : mapa.get(p.id) === v ? null : (mapa.set(p.id, v), v);
   const hit = registro.get(clave);
   if (hit?.prom) return hit.prom.then(aplicar);
   if (hit && Date.now() - hit.at < ttl) return Promise.resolve(aplicar(hit.val));
@@ -1043,9 +1028,7 @@ async function render(container) {
     }
     if (cambio) agendarPaint();
   });
-  // Los seis secundarios por lugar reutilizan lo vigente entre renders (REND-02 t3): la
-  // clave lleva id y coordenadas (editar invalida), el panorama se comparte por comuna y
-  // el vuelo en curso alimenta al render nuevo. Pintan en cuanto llegan, coalescidos.
+  // Consulta solo lo vencido; cada resultado repinta en cuanto llega.
   places.forEach((p) => SECUNDARIOS.forEach((fila, i) => {
     pedirSecundario(secRegistro, i, p, fila).then((v) => v != null && agendarPaint());
   }));
