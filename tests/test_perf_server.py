@@ -463,20 +463,13 @@ def test_config_check_espera_timeout_real_agota_el_plazo_a_la_primera(monkeypatc
 
 # --------------------------------------------- config_check: consola clasificada por su URL
 
-class UbicacionConsola:
-    """location de un mensaje de consola de Playwright: la URL del recurso que falló."""
-
-    def __init__(self, url):
-        self.url = url
-
-
 class ConsolaFake:
-    """Mensaje de consola de Playwright de mentira."""
+    """Mensaje de consola de Playwright de mentira: location es un dict, como en Python."""
 
     def __init__(self, tipo="error", texto="", url=None):
         self.type = tipo
         self.text = texto
-        self.location = UbicacionConsola(url) if url else None
+        self.location = {"url": url, "lineNumber": 0, "columnNumber": 0} if url else {}
 
 
 def test_config_check_consola_de_externas_bloqueadas_es_bloqueado():
@@ -536,3 +529,34 @@ def test_config_check_consola_ignora_lo_que_no_es_error():
                                        url="https://tiles.openfreemap.org/planet"))
     bitacora._a_la_consola(ConsolaFake(tipo="log", texto="ruido"))
     assert bitacora.errores == []
+
+def test_config_check_consola_acepta_location_como_objeto():
+    """Compatibilidad: si location llega como objeto con atributo url, también se usa."""
+    class Ubicacion:
+        url = "https://tiles.openfreemap.org/planet"
+
+    class Consola:
+        type = "error"
+        text = "Failed to load resource: net::ERR_FAILED"
+        location = Ubicacion()
+
+    bitacora = cc.Bitacora("http://127.0.0.1:8002")
+    bitacora._a_la_consola(Consola())
+    assert [e["clase"] for e in bitacora.errores] == ["bloqueado"]
+
+
+class PedidoFake:
+    def __init__(self, metodo, url):
+        self.method, self.url = metodo, url
+
+
+def test_config_check_registra_alta_anonima_y_envios_prohibidos():
+    """Fallo del segundo CI con retraso 3000: el alta anónima lanzaba KeyError en el listener
+    (clave singular contra el dict en plural) y ese error se propagaba a las esperas."""
+    bitacora = cc.Bitacora("http://127.0.0.1:8002")
+    bitacora._al_pedir(PedidoFake("POST", "http://127.0.0.1:8002/api/subscribers"))
+    bitacora._al_pedir(PedidoFake("POST", "http://127.0.0.1:8002/api/reports"))
+    bitacora._al_pedir(PedidoFake("GET", "http://127.0.0.1:8002/api/config"))
+    bitacora._al_pedir(PedidoFake("POST", "https://challenges.cloudflare.com/x"))
+    assert bitacora.posts == {"permitidos": ["POST http://127.0.0.1:8002/api/subscribers"],
+                              "prohibidos": ["POST http://127.0.0.1:8002/api/reports"]}

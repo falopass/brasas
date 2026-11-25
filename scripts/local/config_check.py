@@ -281,7 +281,8 @@ class Bitacora:
             return
         if not mr.mismo_origen(pedido.url, self.base):
             return  # lo externo ya lo bloquea el harness: se clasifica en _al_fallar
-        self.posts[clasificar_post(pedido.url, self.base)].append(f"{pedido.method} {pedido.url}")
+        clave = "permitidos" if clasificar_post(pedido.url, self.base) == "permitido" else "prohibidos"
+        self.posts[clave].append(f"{pedido.method} {pedido.url}")
 
     def _al_responder(self, respuesta):
         if urlparse(respuesta.url).path == "/api/config" and respuesta.status < 400:
@@ -329,7 +330,9 @@ class Bitacora:
         # es «bloqueado», igual que en requestfailed; todo lo demás conserva la
         # clasificación por texto. Nada se omite del informe.
         try:
-            url = mensaje.location.url if mensaje.location else ""
+            ubicacion = mensaje.location
+            # Playwright para Python entrega location como dict ({"url", "lineNumber", ...}).
+            url = (ubicacion.get("url") if isinstance(ubicacion, dict) else getattr(ubicacion, "url", "")) or ""
         except Exception:
             url = ""
         if url:
