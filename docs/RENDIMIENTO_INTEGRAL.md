@@ -307,5 +307,36 @@ base `fd9ab37`, [CI reproducible](https://github.com/falopass/brasas/actions/run
 
 Es una línea base de los escenarios declarados, no una mejora de rendimiento
 ni aceptación de la matriz completa. La segunda tanda se compara contra
-`358980d` (merge de la primera); sus resultados siguen pendientes.
+`358980d` (merge de la primera).
 REND-02 completo sigue abierto.
+
+### Resultado de la segunda tanda
+
+[PR #987](https://github.com/falopass/brasas/pull/987), candidato `cd6ee70`,
+base `358980d`, [CI reproducible](https://github.com/falopass/brasas/actions/runs/45553344799):
+
+- Cuatro jobs (móvil/escritorio × `/api/config` normal y retrasada 3.000 ms),
+  red/CPU normales, caché fría, cinco muestras: 7/7 comparaciones válidas en
+  cada uno y cero errores de producto.
+- Con retraso de 3.000 ms, acceso directo (mediana base → candidata): mi-zona
+  3.521 → 533 ms en móvil y 3.514 → 538 ms en escritorio; las siete rutas
+  bajan entre 84,6 % y 86,9 %. Con configuración normal la diferencia es
+  pequeña (−15 % a +1 %).
+- Pasos `desdePortada` y `reingreso` en escritorio: variación amplia con
+  signo cambiante entre corridas (por ejemplo, mapa `desdePortada` +48 % sin
+  retraso y −73 % con retraso; peores muestras de hasta 2,8 s). Con cinco
+  muestras y sondeo de 80 ms no se afirma mejora ni regresión en esos pasos;
+  se vuelven a medir en la tercera tanda. En móvil quedan dentro de ±5 %.
+- Recorrido funcional con `/api/config` retenida (`config_check.py`): portada,
+  modal de lugar, mapa y reporte usables antes de la llegada; foco, valores
+  y Turnstile sin huérfanos tras ella; dos altas anónimas registradas y
+  ningún envío prohibido. El fallo previo del harness se debía a una clave
+  mal escrita en el registro de envíos y a leer `location` de la consola
+  como objeto en lugar de dict; no a la app.
+- API: cuerpos equivalentes y gate caliente aprobado (peor p95 caliente 88 ms).
+- Build servido: 123,7 KiB gzip bloqueante y 274,9 KiB total, bajo 125/275,
+  sin cambiar los topes.
+
+La «Revisión en navegador» falla de forma intermitente en el recorrido por
+teclado del control «Capas», también en `main` (`358980d`); pasó en el
+candidato final. Queda anotado como inestabilidad previa sin corregir.

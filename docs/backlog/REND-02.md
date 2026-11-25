@@ -71,6 +71,11 @@ artefactos técnicos de CI, nunca promesas ni puntuaciones aisladas.
 Primera tanda fusionada en [PR #986](https://github.com/falopass/brasas/pull/986)
 con nueve checks verdes, revisiones de seguridad/UX aprobadas y línea base
 válida para siete rutas, móvil/escritorio, red/CPU normales y caché fría.
-Segunda tanda en implementación: configuración no bloqueante y consumidores
-que mantienen su función cuando llega tarde. No hay ahorros entregados todavía.
-La matriz integral y las tandas 3–9 siguen pendientes.
+Segunda tanda fusionada en [PR #987](https://github.com/falopass/brasas/pull/987)
+(`c6ffb0c`), con once checks verdes y revisiones UX/seguridad aprobadas.
+Con `/api/config` retrasada 3.000 ms, el acceso directo a las siete rutas
+baja de ~3,4–4,8 s a ~0,46–0,66 s (mediana) en móvil y escritorio. Sin
+retraso no hay cambio material. Resultados y límites en
+[`../RENDIMIENTO_INTEGRAL.md`](../RENDIMIENTO_INTEGRAL.md). Margen de peso
+total: 0,1 KiB gzip bajo 275, así que las próximas tandas deben ser neutras
+o reducir peso. La matriz integral y las tandas 3–9 siguen pendientes.
